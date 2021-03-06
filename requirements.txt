@@ -1,0 +1,4 @@
+impacket
+ftplib
+libnfs
+python-magic
