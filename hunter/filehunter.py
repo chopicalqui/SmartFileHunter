@@ -139,7 +139,7 @@ if __name__ == "__main__":
                 # Create analysis/consumer threads
                 for i in range(args.threads):
                     FileAnalzer(args=args, engine=engine, file_queue=file_queue, config=config).start()
-                hunter = enumeration_class(args, config=config, file_queue=file_queue, temp_dir=temp_dir)
+                hunter = enumeration_class(args, engine=engine, file_queue=file_queue, config=config, temp_dir=temp_dir)
                 hunter.enumerate()
                 file_queue.join()
     except WorkspaceNotFound as ex:

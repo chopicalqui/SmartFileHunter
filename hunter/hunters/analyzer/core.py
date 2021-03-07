@@ -126,13 +126,19 @@ class FileAnalzer(Thread):
         :param path: The path object to be analysed.
         :return:
         """
-        if "ASCII text" in path.file.file_type:
-            # First analyze the file's content
-            if not self._analyze_content(path):
-                # If file content did not return any results, then verify the file name
+        with self.engine.session_scope() as session:
+            workspace = self.engine.get_workspace(session=session, name=self.workspace)
+            exists = self.engine.get_file(session=session,
+                                          workspace=workspace,
+                                          sha256_value=path.file.sha256_value) is not None
+        if not exists:
+            if "ASCII text" in path.file.file_type:
+                # First analyze the file's content
+                if not self._analyze_content(path):
+                    # If file content did not return any results, then verify the file name
+                    self._analyze_path_name(path)
+            elif "zip archive data" in path.file.file_type:
+                pass
+            else:
+                # If non-searchable file, then just analyze the file name
                 self._analyze_path_name(path)
-        elif "zip archive data" in path.file.file_type:
-            pass
-        else:
-            # If non-searchable file, then just analyze the file name
-            self._analyze_path_name(path)

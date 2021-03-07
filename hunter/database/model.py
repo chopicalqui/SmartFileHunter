@@ -175,8 +175,8 @@ class Service(DeclarativeBase):
     __tablename__ = "service"
     id = Column(Integer, primary_key=True)
     port = Column(Integer, nullable=False, unique=False)
-    name = Column(String(10), nullable=True, unique=False)
-    host_id = Column(Integer, ForeignKey("host.id", ondelete='cascade'), nullable=True, unique=False)
+    name = Column(String(10), nullable=False, unique=False)
+    host_id = Column(Integer, ForeignKey("host.id", ondelete='cascade'), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
     paths = relationship("Path",
@@ -194,7 +194,7 @@ class Path(DeclarativeBase):
     _full_path = Column("full_path", Text, nullable=False, unique=False)
     file_name = Column(Text, nullable=False, unique=False)
     extension = Column(Text, nullable=False, unique=False)
-    share = Column(Text, nullable=True)
+    share = Column(Text, nullable=True, server_default='')
     access_time = Column(DateTime, nullable=True)
     modified_time = Column(DateTime, nullable=True)
     creation_time = Column(DateTime, nullable=True)
@@ -246,7 +246,7 @@ class File(DeclarativeBase):
     def content(self, value: bytes):
         self._content = value
         self.size_bytes = len(value)
-        self.sha256_value = hashlib.sha256(value).hexdigest()
+        self.sha256_value = self.calculate_sha256_value(value)
         self.file_type = magic.from_buffer(value)
         self.mime_type = magic.from_buffer(value, mime=True)
 
@@ -258,6 +258,15 @@ class File(DeclarativeBase):
         """
         if match_rule not in self.matches:
             self.matches.append(match_rule)
+
+    @staticmethod
+    def calculate_sha256_value(content: bytes) -> str:
+        """
+        This method calculates the sha256 value of the given content.
+        :param content:
+        :return:
+        """
+        return hashlib.sha256(content).hexdigest()
 
     def __repr__(self) -> str:
         return "<File sha256_value='{}' file_type='{}' mime_type='{}' />".format(self.sha256_value,

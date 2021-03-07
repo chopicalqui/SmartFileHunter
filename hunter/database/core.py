@@ -195,6 +195,21 @@ class Engine:
         return workspace
 
     @staticmethod
+    def add_workspace(session, name) -> Workspace:
+        """
+        This method shall be used to add a new workspace to the database
+        :param session: Database session used to add the email address
+        :param name: The workspace's name
+        :return: Database object
+        """
+        result = session.query(Workspace).filter_by(name=name).one_or_none()
+        if not result:
+            result = Workspace(name=name)
+            session.add(result)
+            session.flush()
+        return result
+
+    @staticmethod
     def get_host(session: Session,
                  workspace: Workspace,
                  address: str) -> Host:
@@ -218,7 +233,7 @@ class Engine:
         """
         result = Engine.get_host(session=session, workspace=workspace, address=address)
         if not result:
-            result = Host(address=address, workspace_id=workspace.id)
+            result = Host(address=address, workspace=workspace)
             session.add(result)
             session.flush()
         return result
