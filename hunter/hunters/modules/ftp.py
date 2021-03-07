@@ -36,14 +36,14 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, **kwargs)
+        super().__init__(args, service_name="ftp", **kwargs)
         self.username = args.username
         self.password = args.password
         self.tls = args.tls
         if self.tls:
-            self.client = ftplib.FTP_TLS(host=self.target_ip, user=self.username, passwd=self.password)
+            self.client = ftplib.FTP_TLS(host=self.service.host.address, user=self.username, passwd=self.password)
         else:
-            self.client = ftplib.FTP(host=self.target_ip, user=self.username, passwd=self.password)
+            self.client = ftplib.FTP(host=self.service.host.address, user=self.username, passwd=self.password)
         if self.verbose:
             self.client.getwelcome()
 

@@ -44,7 +44,6 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import BYTEA
-from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -58,16 +57,16 @@ class WorkspaceNotFound(Exception):
         super().__init__("workspace '{}' does not exist in database".format(workspace))
 
 
-class ProtocolType(enum.Enum):
-    udp = enum.auto()
-    tcp = enum.auto()
-
-
 class ReviewResult(enum.Enum):
     unreviewed = enum.auto()
     irrelevant = enum.auto()
     relevant = enum.auto()
     tbd = enum.auto()
+
+
+class ImportAction(enum.Enum):
+    full_import = enum.auto()
+    path_only = enum.auto()
 
 
 class FileRelevance(enum.Enum):
@@ -166,7 +165,7 @@ class Host(DeclarativeBase):
     services = relationship("Service",
                             backref=backref("host"),
                             cascade="all, delete-orphan",
-                            order_by="desc(Service.protocol), asc(Service.port)")
+                            order_by="asc(Service.port)")
     __table_args__ = (UniqueConstraint('workspace_id', 'address', name='_host_unique'),)
 
 
@@ -175,7 +174,6 @@ class Service(DeclarativeBase):
 
     __tablename__ = "service"
     id = Column(Integer, primary_key=True)
-    protocol = Column(Enum(ProtocolType), nullable=False, unique=False)
     port = Column(Integer, nullable=False, unique=False)
     name = Column(String(10), nullable=True, unique=False)
     host_id = Column(Integer, ForeignKey("host.id", ondelete='cascade'), nullable=True, unique=False)
@@ -184,8 +182,8 @@ class Service(DeclarativeBase):
     paths = relationship("Path",
                          backref=backref("service"),
                          cascade="all",
-                         order_by="asc(Path.name)")
-    __table_args__ = (UniqueConstraint("port", "protocol", "host_id", name="_service_host_unique"),)
+                         order_by="asc(Path._full_path)")
+    __table_args__ = (UniqueConstraint("port", "host_id", name="_service_host_unique"),)
 
 
 class Path(DeclarativeBase):
@@ -193,8 +191,10 @@ class Path(DeclarativeBase):
 
     __tablename__ = "path"
     id = Column(Integer, primary_key=True)
-    name = Column(Text, nullable=False, unique=False)
+    _full_path = Column("full_path", Text, nullable=False, unique=False)
+    file_name = Column(Text, nullable=False, unique=False)
     extension = Column(Text, nullable=False, unique=False)
+    share = Column(Text, nullable=True)
     access_time = Column(DateTime, nullable=True)
     modified_time = Column(DateTime, nullable=True)
     creation_time = Column(DateTime, nullable=True)
@@ -206,7 +206,17 @@ class Path(DeclarativeBase):
                         backref=backref("paths"),
                         cascade="all",
                         order_by="desc(File.size_bytes)")
-    __table_args__ = (UniqueConstraint('name', 'service_id', name='_path_unique'),)
+    __table_args__ = (UniqueConstraint('full_path', 'share', 'service_id', name='_path_unique'),)
+
+    @property
+    def full_path(self) -> str:
+        return self._full_path
+
+    @full_path.setter
+    def full_path(self, value: str) -> None:
+        self.extension = os.path.splitext(value)[1]
+        self._full_path = value.replace("\\", "/")
+        self.file_name = os.path.basename(self._full_path)
 
 
 class File(DeclarativeBase):
@@ -235,9 +245,24 @@ class File(DeclarativeBase):
     @content.setter
     def content(self, value: bytes):
         self._content = value
+        self.size_bytes = len(value)
         self.sha256_value = hashlib.sha256(value).hexdigest()
         self.file_type = magic.from_buffer(value)
         self.mime_type = magic.from_buffer(value, mime=True)
+
+    def add_match_rule(self, match_rule):
+        """
+        This method shall be used to add a match rule to tis file
+        :param match_rule: The match rule object that shall be added
+        :return:
+        """
+        if match_rule not in self.matches:
+            self.matches.append(match_rule)
+
+    def __repr__(self) -> str:
+        return "<File sha256_value='{}' file_type='{}' mime_type='{}' />".format(self.sha256_value,
+                                                                                 self.file_type,
+                                                                                 self.mime_type)
 
 
 class MatchRule(DeclarativeBase):
@@ -268,6 +293,22 @@ class MatchRule(DeclarativeBase):
     def __eq__(self, value):
         return self.search_location == value.search_location and self.search_pattern == value.search_pattern
 
+    def is_match(self, path: Path) -> bool:
+        """
+        This method determines whether the given path object matches this match rule.
+        :param path: The path object that is analyzed.
+        :return:
+        """
+        if self.search_location == SearchLocation.file_content:
+            result = len(self.search_pattern_re.findall(path.file.content.decode('utf-8'))) > 0
+        elif self.search_location == SearchLocation.file_name:
+            result = self.search_pattern_re.match(path.file_name) is not None
+        elif self.search_location == SearchLocation.directory_name:
+            result = self.search_pattern_re.match(path.full_path) is not None
+        else:
+            raise NotImplementedError("this case is not implemented")
+        return result
+
     @staticmethod
     def from_json(json_object: dict):
         """
@@ -279,7 +320,7 @@ class MatchRule(DeclarativeBase):
         category = json_object["category"]
         relevance = FileRelevance[json_object["relevance"]]
         search_pattern = json_object["search_pattern"]
-        action = json_object["action"]
+        action = ImportAction[json_object["action"]]
         priority = search_location.value + relevance.value
         rule = MatchRule(search_location=search_location,
                          category=category,

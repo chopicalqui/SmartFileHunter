@@ -85,15 +85,6 @@ class Engine:
         """This method drops all tables in the database."""
         DeclarativeBase.metadata.drop_all(self.engine, checkfirst=True)
 
-    def get_workspace(self, session, name: str) -> Workspace:
-        try:
-            workspace = session.query(Workspace).filter(Workspace.name == name).one()
-        except sqlalchemy.orm.exc.NoResultFound:
-            print("Only the following workspaces exist:", file=sys.stderr)
-            self.list_workspaces()
-            workspace = None
-        return workspace
-
     def print_workspaces(self):
         with self.session_scope() as session:
             workspaces = session.query(Workspace).all()
@@ -197,6 +188,12 @@ class Engine:
             session.flush()
         return instance
 
+    def get_workspace(self, session, name: str) -> Workspace:
+        workspace = session.query(Workspace).filter(Workspace.name == name).one_or_none()
+        if not workspace:
+            raise WorkspaceNotFound("workspace '{}' not found.".format(name))
+        return workspace
+
     @staticmethod
     def get_host(session: Session,
                  workspace: Workspace,
@@ -221,16 +218,13 @@ class Engine:
         """
         result = Engine.get_host(session=session, workspace=workspace, address=address)
         if not result:
-            rvalue = Host(address=address, workspace=workspace)
-            session.add(rvalue)
+            result = Host(address=address, workspace_id=workspace.id)
+            session.add(result)
             session.flush()
         return result
 
     @staticmethod
-    def get_service(session: Session,
-                    port: int,
-                    protocol_type: ProtocolType,
-                    host: Host = None) -> Service:
+    def get_service(session: Session, port: int, host: Host = None) -> Service:
         """
          This method should be used to obtain a service object from the database
          :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
@@ -240,14 +234,11 @@ class Engine:
          :return: Database object
          """
         return session.query(Service) \
-            .filter(Service.port == port,
-                    Service.protocol == protocol_type,
-                    Service.host_id == host.id).one_or_none()
+            .filter(Service.port == port, Service.host_id == host.id).one_or_none()
 
     @staticmethod
     def add_service(session: Session,
                     port: int,
-                    protocol_type: ProtocolType,
                     host: Host,
                     name: str = None) -> Service:
         """
@@ -259,12 +250,9 @@ class Engine:
          :param name: Specifies the service's name
          :return: Database object
          """
-        result = Engine.get_service(session=session, port=port, protocol_type=protocol_type, host=host)
+        result = Engine.get_service(session=session, port=port, host=host)
         if not result:
-            result = Service(port=port,
-                             protocol=protocol_type,
-                             name=name,
-                             host=host)
+            result = Service(port=port, name=name, host=host)
             session.add(result)
             session.flush()
         return result
@@ -272,21 +260,22 @@ class Engine:
     @staticmethod
     def get_path(session: Session,
                  service: Service,
-                 name: str) -> Path:
+                 full_path: str) -> Path:
         """
         This method should be used to obtain a path object from the database
         :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
         :param service: The service object to which the path belongs
-        :param name: The path that shall be returned
+        :param full_path: The path that shall be returned
         :return: Database object
         """
-        return session.query(Path).filter_by(name=name, service_id=service.id).one_or_none()
+        return session.query(Path).filter_by(_full_path=full_path, service_id=service.id).one_or_none()
 
     @staticmethod
     def add_path(session: Session,
                  service: Service,
-                 name: str,
+                 full_path: str,
                  file: File,
+                 share: str = None,
                  access_time: DateTime = None,
                  modified_time: DateTime = None,
                  creation_time: DateTime = None) -> Path:
@@ -294,20 +283,19 @@ class Engine:
         This method should be used to add a path to the database
         :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
         :param service: The service object to which the path belongs
-        :param name: The path that shall be added
+        :param full_path: The path that shall be added
         :param file: The file object to which the path points to
         :param access_time: The file's last access time
         :param modified_time: The file's last modified time
         :param creation_time: The file's creation time
         :return: Database object
         """
-        result = Engine.get_path(session=session, service=service, name=name)
+        result = Engine.get_path(session=session, service=service, full_path=full_path)
         if not result:
-            extension = os.path.splitext(name)[1]
             result = Path(service=service,
-                          name=name,
-                          extension=extension,
+                          full_path=full_path,
                           file=file,
+                          share=share,
                           access_time=access_time,
                           modified_time=modified_time,
                           creation_time=creation_time)
@@ -325,33 +313,43 @@ class Engine:
         :param sha256_value: The sha256 value of the file
         :return: Database object
         """
-        return session.query(File).filter_by(sha256_value=sha256_value, workspace_id=workspace.id)
+        return session.query(File).filter_by(sha256_value=sha256_value, workspace_id=workspace.id).one_or_none()
 
     @staticmethod
     def add_file(session: Session,
                  workspace: Workspace,
-                 file: File) -> File:
+                 file: File,
+                 import_action: ImportAction = ImportAction.full_import) -> File:
         """
         This method should be used to add a file to the database
         :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
         :param workspace: The workspace to which the network shall be added
-        :param sha256_value: The sha256 value of the file
-        :param relevance: Specifies the potential relevance of the file for the penetration test
-        :param matches: Contains the rules that classified the file as potentially relevant
-        :param content: The file's actual content
-        :param file_type: The files content type, which is determined by the magic library.
+        :param file: The file object that shall be added
+        :param add_content: True if the file's content shall be added to the database
         :return: Database object
         """
         result = Engine.get_file(session=session, workspace=workspace, sha256_value=file.sha256_value)
         if not result:
-            session.add(file)
+            result = File(workspace_id=workspace.id,
+                          sha256_value=file.sha256_value,
+                          file_type=file.file_type,
+                          size_bytes=file.size_bytes,
+                          mime_type=file.mime_type,
+                          review_result=ReviewResult.unreviewed)
+            session.add(result)
             session.flush()
         else:
             updated = False
-            if not result.content and file.content:
+            if import_action.full_import:
+                if not result.content and file.content:
+                    updated = True
+                    result.content = file.content
+            else:
                 updated = True
-                result.content = file.content
-            if result.review_result != file.review_result:
+                result.file_type = file.file_type
+                result.mime_type = file.mime_type
+                result.size_bytes = file.size_bytes
+            if result.review_result != file.review_result and file.review_result:
                 updated = True
                 result.review_result = file.review_result
             if updated:
@@ -369,7 +367,8 @@ class Engine:
         :param search_pattern: The match rule's search pattern
         :return: Database object
         """
-        return session.query(MatchRule).filter_by(search_location=search_location, search_pattern=search_pattern.id)
+        return session.query(MatchRule).filter_by(search_location=search_location,
+                                                  _search_pattern=search_pattern).one_or_none()
 
     @staticmethod
     def add_match_rule(session: Session,
@@ -389,24 +388,14 @@ class Engine:
                                        search_location=search_location,
                                        search_pattern=search_pattern)
         if not result:
-            result = MatchRule(search_location, search_pattern, relevance)
+            result = MatchRule(search_location=search_location,
+                               search_pattern=search_pattern,
+                               relevance=relevance)
             session.add(result)
             session.flush()
         if category:
             result.category = category
         return result
-
-    @staticmethod
-    def add_match_rule_to_file(file: File,
-                               match_rule: MatchRule) -> None:
-        """
-        This method adds the given match rule to the file
-        :param file: The file to which the match rule shall be added.
-        :param match_rule: The match rule that shall be added to the file
-        :return:
-        """
-        if match_rule not in file.matches:
-            file.matches.append(match_rule)
 
 
 class ManageDatabase:

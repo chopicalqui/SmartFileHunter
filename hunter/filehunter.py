@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-
+this application can be used to search FTP, NFS, or CIFS file services for interesting files
 """
 
 __author__ = "Lukas Reiter"
@@ -24,15 +24,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import sys
+import logging
 import argparse
 import tempfile
-import traceback
+from queue import Queue
 from database.core import Engine
 from database.core import ManageDatabase
 from database.core import DeclarativeBase
+from database.model import WorkspaceNotFound
+from hunters.analyzer.core import FileAnalzer
 from hunters.modules.smb import SmbSensitiveFileHunter
 from hunters.modules.ftp import FtpSensitiveFileHunter
 from hunters.modules.nfs import NfsSensitiveFileHunter
+from config.config import FileHunter as FileHunterConfig
+
+logger = logging.getLogger("main")
 
 
 if __name__ == "__main__":
@@ -64,6 +70,7 @@ if __name__ == "__main__":
     # setup SMB parser
     parser_smb.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_smb.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
+    parser_smb.add_argument('-t', '--threads', type=int, default=5, help='number of analysis threads')
     smb_target_group = parser_smb.add_argument_group('target information')
     smb_target_group.add_argument('--host', type=str, metavar="HOST", help="the target SMB service's IP address")
     smb_target_group.add_argument('--port', type=int, default=445, metavar="PORT",
@@ -123,8 +130,19 @@ if __name__ == "__main__":
                 enumeration_class = NfsSensitiveFileHunter
             if enumeration_class:
                 engine = Engine()
+                config = FileHunterConfig()
+                file_queue = Queue()
                 DeclarativeBase.metadata.bind = engine.engine
-                hunter = enumeration_class(args, engine=engine, temp_dir=temp_dir)
+                # Check wheather name space exists
+                with engine.session_scope() as session:
+                    workspace = engine.get_workspace(session=session, name=args.workspace)
+                # Create analysis/consumer threads
+                for i in range(args.threads):
+                    FileAnalzer(args=args, engine=engine, file_queue=file_queue, config=config).start()
+                hunter = enumeration_class(args, config=config, file_queue=file_queue, temp_dir=temp_dir)
                 hunter.enumerate()
+                file_queue.join()
+    except WorkspaceNotFound as ex:
+        print(str(ex, file=sys.stderr))
     except Exception as ex:
-        traceback.print_exc(ex)
+        logger.exception(ex)

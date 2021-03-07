@@ -74,7 +74,6 @@ class FileHunter(BaseConfig):
         # sort matching rules according to their priority
         for key, value in self.matching_rules.items():
             self.matching_rules[key] = sorted(value, key=lambda rule: rule.priority)
-        print(self.matching_rules)
 
 
 class Database(BaseConfig):

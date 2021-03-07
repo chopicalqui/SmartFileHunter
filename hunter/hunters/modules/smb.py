@@ -23,11 +23,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import os
-import time
 import ntpath
 import logging
 import argparse
 import tempfile
+import datetime
+from database.model import Path
+from database.model import File
 from impacket.smbconnection import SMB_DIALECT
 from impacket.smbconnection import SMB2_DIALECT_002
 from impacket.smbconnection import SMB2_DIALECT_21
@@ -44,7 +46,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, **kwargs)
+        super().__init__(args, service_name="smb", **kwargs)
         self.username = args.username
         if args.password:
             self.password = args.password
@@ -53,7 +55,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         else:
             self.lm_hash, self.nt_hash = args.hashes.split(':')
         self.domain = args.domain
-        self.client = SMBConnection(self.target_ip, self.target_ip, sess_port=self.port)
+        self.client = SMBConnection(self.service.host.address, self.service.host.address, sess_port=self.service.port)
         self.client.login(self.username, self.password, self.domain, self.lm_hash, self.nt_hash)
         if self.verbose:
             dialect = self.client.getDialect()
@@ -102,22 +104,29 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             try:
                 self._enumerate(name)
             except Exception as ex:
-                logger.exception(ex)
+                if "STATUS_ACCESS_DENIED" not in str(ex):
+                    logger.exception(ex)
 
-    def _enumerate(self, share: str, directory: str="/") -> None:
+    def _enumerate(self, share: str, directory: str = "/") -> None:
         for item in self.client.listPath(share, self.pathify(directory)):
-            filesize = item.get_filesize()
+            file_size = item.get_filesize()
             filename = item.get_longname()
             is_directory = item.is_directory()
-            print("{} {}".format(directory, is_directory))
-            date = time.ctime(float(item.get_mtime_epoch()))
             if filename not in ['.', '..']:
                 full_path = os.path.join(directory, filename)
-                if item.is_directory():
+                if is_directory:
                     self._enumerate(share, os.path.join(directory, filename))
-                elif self.is_file_size_below_threshold(filesize):
+                elif self.is_file_size_below_threshold(file_size):
+                    path = Path(service=self.service,
+                                full_path=full_path,
+                                share=share,
+                                access_time=datetime.datetime.utcfromtimestamp(item.get_atime_epoch()),
+                                modified_time=datetime.datetime.utcfromtimestamp(item.get_mtime_epoch()),
+                                creation_time=datetime.datetime.utcfromtimestamp(item.get_ctime_epoch()))
                     with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
                         with open(temp.name, "wb") as file:
-                            print("{} {}".format(full_path, is_directory))
                             self.client.getFile(share, full_path, file.write, FILE_SHARE_READ)
-                            # todo analyse file content
+                        with open(temp.name, "rb") as file:
+                            content = file.read()
+                    path.file = File(content=content, size_bytes=file_size)
+                    self.file_queue.put(path)

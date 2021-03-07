@@ -22,6 +22,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
+import argparse
+from queue import Queue
+from database.model import Host
+from database.model import Service
+from database.model import Workspace
 from config.config import FileHunter as FileHunterConfig
 
 
@@ -30,22 +35,23 @@ class BaseSensitiveFileHunter:
     This class implements the core functionality to hunt for files.
     """
 
-    def __init__(self, args, temp_dir, **kwargs):
-        self.target_ip = args.host
-        self.port = args.port
+    def __init__(self,
+                 args: argparse.Namespace,
+                 file_queue: Queue, temp_dir,
+                 config: FileHunterConfig,
+                 service_name: str,
+                 **kwargs):
+        self.service = Service(port=args.port, name=service_name)
+        self.service.host = Host(address=args.host)
+        self.service.workspace = Workspace(name=args.workspace)
         self.verbose = args.verbose
-        self.config = FileHunterConfig()
+        self.config = config
         self.temp_dir = temp_dir
+        self.file_queue = file_queue
         self.file_size_threshold = self.config.config["general"].getint("max_file_size_kb")
 
     def is_file_size_below_threshold(self, size: int) -> bool:
         return self.file_size_threshold <= 0 or size <= self.file_size_threshold
-
-    def _analyze(self):
-        """
-        This method is called to
-        :return:
-        """
 
     def enumerate(self):
         """
