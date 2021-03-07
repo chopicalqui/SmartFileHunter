@@ -375,7 +375,8 @@ class Engine:
     def add_match_rule(session: Session,
                        search_location: SearchLocation,
                        search_pattern: str,
-                       relevance: FileRelevance) -> MatchRule:
+                       relevance: FileRelevance,
+                       category: str = None) -> MatchRule:
         """
         This method should be used to add a match rule to the database
         :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
@@ -391,6 +392,8 @@ class Engine:
             result = MatchRule(search_location, search_pattern, relevance)
             session.add(result)
             session.flush()
+        if category:
+            result.category = category
         return result
 
     @staticmethod

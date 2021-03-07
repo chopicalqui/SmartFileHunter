@@ -21,12 +21,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import os
+import re
 import json
+import logging
 import configparser
-import pwd
-from argparse import RawDescriptionHelpFormatter
-from operator import attrgetter
-from typing import List
+from database.model import MatchRule
+
+logger = logging.getLogger("config")
 
 
 class BaseConfig:
@@ -59,8 +60,21 @@ class FileHunter(BaseConfig):
 
     def __init__(self):
         super().__init__("hunters.config")
+        self.matching_rules = {}
         self.kali_packages = json.loads(self.get_config_str("setup", "kali_packages"))
         self.scripts = json.loads(self.get_config_str("setup", "scripts"))
+        for match_rule in json.loads(self.get_config_str("general", "match_rules")):
+            try:
+                rule = MatchRule.from_json(match_rule)
+                if rule.search_location.name not in self.matching_rules:
+                    self.matching_rules[rule.search_location.name] = []
+                self.matching_rules[rule.search_location.name].append(rule)
+            except re.error:
+                logging.error("failed to compile regex: {}".format(match_rule["search_pattern"]))
+        # sort matching rules according to their priority
+        for key, value in self.matching_rules.items():
+            self.matching_rules[key] = sorted(value, key=lambda rule: rule.priority)
+        print(self.matching_rules)
 
 
 class Database(BaseConfig):

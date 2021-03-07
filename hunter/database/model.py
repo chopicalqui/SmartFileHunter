@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import os
+import re
 import hashlib
 import magic
 import enum
@@ -70,15 +71,15 @@ class ReviewResult(enum.Enum):
 
 
 class FileRelevance(enum.Enum):
-    low = enum.auto()
-    medium = enum.auto()
-    high = enum.auto()
+    low = 100
+    medium = 80
+    high = 70
 
 
 class SearchLocation(enum.Enum):
-    file_name = enum.auto()
-    directory_name = enum.auto()
-    file_content = enum.auto()
+    file_name = 20
+    directory_name = 10
+    file_content = 0
 
 
 class CastingArray(ARRAY):
@@ -223,10 +224,10 @@ class File(DeclarativeBase):
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
     __table_args__ = (UniqueConstraint('sha256_value', 'workspace_id', name='_file_unique'),)
-    matches = relationship("Path",
+    matches = relationship("MatchRule",
                            secondary=file_match_rule_mapping,
                            backref=backref("files",
-                                           order_by="asc(MatchRule.search_location, MatchRule.search_pattern)"))
+                                           order_by="asc(MatchRule.relevance)"))
     @property
     def content(self) -> bytes:
         return self._content
@@ -245,11 +246,45 @@ class MatchRule(DeclarativeBase):
     __tablename__ = "match_rule"
     id = Column(Integer, primary_key=True)
     search_location = Column(Enum(SearchLocation), nullable=False, unique=False)
-    search_pattern = Column(Text, nullable=False, unique=False)
+    _search_pattern = Column("search_pattern", Text, nullable=False, unique=False)
+    category = Column(Text, nullable=True, unique=False)
     relevance = Column(Enum(FileRelevance), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
+    search_pattern_re = None
+    priority = None
+    action = None
     __table_args__ = (UniqueConstraint('search_location', 'search_pattern', name='_match_rule_unique'),)
+
+    @property
+    def search_pattern(self) -> str:
+        return self._search_pattern
+
+    @search_pattern.setter
+    def search_pattern(self, value: str) -> None:
+        self._search_pattern = value
+        self.search_pattern_re = re.compile(value, re.IGNORECASE)
 
     def __eq__(self, value):
         return self.search_location == value.search_location and self.search_pattern == value.search_pattern
+
+    @staticmethod
+    def from_json(json_object: dict):
+        """
+        This method converts the given json_object into a MatchRule object
+        :param json_object: The json_object containing all information to create a MatchRule object
+        :return: The match rule object
+        """
+        search_location = SearchLocation[json_object["search_location"]]
+        category = json_object["category"]
+        relevance = FileRelevance[json_object["relevance"]]
+        search_pattern = json_object["search_pattern"]
+        action = json_object["action"]
+        priority = search_location.value + relevance.value
+        rule = MatchRule(search_location=search_location,
+                         category=category,
+                         relevance=relevance,
+                         search_pattern=search_pattern,
+                         action=action,
+                         priority=priority)
+        return rule
