@@ -25,22 +25,45 @@ __version__ = 0.1
 
 import sys
 import argparse
-import logging
 import tempfile
 import traceback
+from database.core import Engine
+from database.core import ManageDatabase
+from database.core import DeclarativeBase
 from hunters.modules.smb import SmbSensitiveFileHunter
 from hunters.modules.ftp import FtpSensitiveFileHunter
 from hunters.modules.nfs import NfsSensitiveFileHunter
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-l", "--list", action='store_true', help="list existing workspaces")
     sub_parser = parser.add_subparsers(help='list of available file hunter modules', dest="module")
+    parser_database = sub_parser.add_parser('db', help='allows setting up and managing the database')
     parser_smb = sub_parser.add_parser('smb', help='enumerate SMB services')
     parser_ftp = sub_parser.add_parser('ftp', help='enumerate FTP services')
     parser_nfs = sub_parser.add_parser('nfs', help='enumerate NFS services')
-    # create SMB arguments
+    # setup database parser
+    parser_database.add_argument('-a', '--add',
+                                 type=str,
+                                 help="create the given workspace")
+    parser_database.add_argument("--init",
+                                 help="creates tables, views, functions, and triggers in the filehunter database",
+                                 action="store_true")
+    parser_database.add_argument("--drop",
+                                 help="drops tables, views, functions, and triggers in the filehunter database",
+                                 action="store_true")
+    parser_database.add_argument("--backup", metavar="FILE", type=str, help="writes database backup to FILE")
+    parser_database.add_argument("--restore", metavar="FILE", type=str, help="restores database backup from FILE")
+    parser_database.add_argument("--setup",
+                                 action="store_true",
+                                 help="run initial setup for filehunter")
+    parser_database.add_argument("--setup-dbg",
+                                 action="store_true",
+                                 help="like --setup but just prints commands for initial setup for filehunter")
+    # setup SMB parser
     parser_smb.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
+    parser_smb.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     smb_target_group = parser_smb.add_argument_group('target information')
     smb_target_group.add_argument('--host', type=str, metavar="HOST", help="the target SMB service's IP address")
     smb_target_group.add_argument('--port', type=int, default=445, metavar="PORT",
@@ -58,9 +81,10 @@ if __name__ == "__main__":
                                              metavar="LMHASH:NTHASH", help='NTLM hashes, format is LMHASH:NTHASH')
     parser_smb_credential_group.add_argument('-p', '--password', action="store",
                                              metavar="PASSWORD", help='password of given user')
-    # create FTP arguments
+    # setup FTP parser
     parser_ftp.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_ftp.add_argument('-t', '--tls', action="store_true", help='use TLS')
+    parser_ftp.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     ftp_target_group = parser_ftp.add_argument_group('target information')
     ftp_target_group.add_argument('--host', type=str, metavar="HOST", help="the target FTP service's IP address")
     ftp_authentication_group = parser_ftp.add_argument_group('authentication')
@@ -68,9 +92,10 @@ if __name__ == "__main__":
                                           metavar="USERNAME", help='the name of the user to use for authentication')
     ftp_authentication_group.add_argument('-p', '--password', action="store", default='',
                                           metavar="PASSWORD", help='password of given user')
-    # create NFS arguments
+    # setup NFS parser
     parser_nfs.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_nfs.add_argument('--version', type=int, choices=[3, 4], default=3, help='NFS version to use')
+    parser_nfs.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     nfs_target_group = parser_nfs.add_argument_group('target information')
     nfs_target_group.add_argument('--host', type=str, metavar="HOST", help="the target NFS service's IP address")
     nfs_target_group.add_argument('--port', type=int, default=445, metavar="PORT", help="the target NFS service's port")
@@ -83,14 +108,23 @@ if __name__ == "__main__":
 
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
-            if args.module == "smb":
-                hunter = SmbSensitiveFileHunter(args, temp_dir=temp_dir)
-                hunter.enumerate()
+            enumeration_class = None
+            if args.list:
+                engine = Engine()
+                DeclarativeBase.metadata.bind = engine.engine
+                engine.print_workspaces()
+            elif args.module == "db":
+                ManageDatabase(args).run()
+            elif args.module == "smb":
+                enumeration_class = SmbSensitiveFileHunter
             elif args.module == "ftp":
-                hunter = FtpSensitiveFileHunter(args, temp_dir=temp_dir)
-                hunter.enumerate()
+                enumeration_class = FtpSensitiveFileHunter
             elif args.module == "nfs":
-                hunter = NfsSensitiveFileHunter(args, temp_dir=temp_dir)
+                enumeration_class = NfsSensitiveFileHunter
+            if enumeration_class:
+                engine = Engine()
+                DeclarativeBase.metadata.bind = engine.engine
+                hunter = enumeration_class(args, engine=engine, temp_dir=temp_dir)
                 hunter.enumerate()
     except Exception as ex:
         traceback.print_exc(ex)

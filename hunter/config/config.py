@@ -47,9 +47,70 @@ class BaseConfig:
         with open(self.full_path, "w") as file:
             self.config.write(file)
 
+    def get_config_str(self, section: str, name: str) -> str:
+        return self.config[section][name]
+
+    def get_config_int(self, section: str, name: str) -> int:
+        return self.config[section].getint(name)
+
 
 class FileHunter(BaseConfig):
     """This class contains the ConfigParser object for the database"""
 
     def __init__(self):
         super().__init__("hunters.config")
+        self.kali_packages = json.loads(self.get_config_str("setup", "kali_packages"))
+        self.scripts = json.loads(self.get_config_str("setup", "scripts"))
+
+
+class Database(BaseConfig):
+    """This class contains the ConfigParser object for the database"""
+
+    def __init__(self, production: bool = True):
+        super().__init__("database.config")
+        self._production = production
+
+    @property
+    def dialect(self) -> str:
+        return self.get_config_str("production", "dialect")
+
+    @property
+    def host(self) -> str:
+        return self.get_config_str("production", "host")
+
+    @property
+    def port(self) -> int:
+        return self.get_config_int("production", "port")
+
+    @property
+    def username(self) -> str:
+        return self.get_config_str("production", "username")
+
+    @property
+    def password(self) -> str:
+        return self.get_config_str("production", "password")
+
+    @password.setter
+    def password(self, value: str) -> None:
+        self.config["production"]["password"] = value
+
+    @property
+    def production_database(self) -> str:
+        return self.get_config_str("production", "database")
+
+    @property
+    def test_database(self) -> str:
+        return self.get_config_str("unittesting", "database")
+
+    @property
+    def database(self) -> str:
+        return self.production_database if self._production else self.test_database
+
+    @property
+    def connection_string(self):
+        return "{}://{}:{}@{}:{}/{}".format(self.dialect,
+                                            self.username,
+                                            self.password,
+                                            self.host,
+                                            self.port,
+                                            self.database)
