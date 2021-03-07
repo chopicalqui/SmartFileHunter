@@ -25,6 +25,7 @@ import time
 import passgen
 import argparse
 import sqlalchemy
+import subprocess
 from threading import Thread
 from sqlalchemy import create_engine
 from config import config
@@ -33,6 +34,7 @@ from config.config import Database as DatabaseConfig
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
+from typing import List
 from contextlib import contextmanager
 
 DeclarativeBase = declarative_base()
@@ -194,6 +196,214 @@ class Engine:
             session.add(instance)
             session.flush()
         return instance
+
+    @staticmethod
+    def get_host(session: Session,
+                 workspace: Workspace,
+                 address: str) -> Host:
+        """
+        This method shall be used to obtain a host object via the given IPv4/IPv6 address from the database
+        :param session: Database session used to add the email address
+        :param workspace: The workspace to which the network shall be added
+        :param address: IPv4/IPv6 address whose host object should be returned from the database
+        :return: Database object
+        """
+        return session.query(Host).filter_by(address=address, workspace_id=workspace.id).one_or_none()
+
+    @staticmethod
+    def add_host(session: Session, workspace: Workspace, address: str):
+        """
+        This method shall be used to add an IPv4 address to the database
+        :param session: Database session used to add the email address
+        :param workspace: The workspace to which the network shall be added
+        :param address: IPv4/IPv6 address that should be added to the database
+        :return: Database object
+        """
+        result = Engine.get_host(session=session, workspace=workspace, address=address)
+        if not result:
+            rvalue = Host(address=address, workspace=workspace)
+            session.add(rvalue)
+            session.flush()
+        return result
+
+    @staticmethod
+    def get_service(session: Session,
+                    port: int,
+                    protocol_type: ProtocolType,
+                    host: Host = None) -> Service:
+        """
+         This method should be used to obtain a service object from the database
+         :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+         :param host: The host object to which the service belongs
+         :param port: The port number that shall be added
+         :param protocol_type: The protocol type that shall be added
+         :return: Database object
+         """
+        return session.query(Service) \
+            .filter(Service.port == port,
+                    Service.protocol == protocol_type,
+                    Service.host_id == host.id).one_or_none()
+
+    @staticmethod
+    def add_service(session: Session,
+                    port: int,
+                    protocol_type: ProtocolType,
+                    host: Host,
+                    name: str = None) -> Service:
+        """
+         This method should be used to add a service to the database
+         :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+         :param host: The host object to which the service belongs
+         :param port: The port number that shall be added
+         :param protocol_type: The protocol type that shall be added
+         :param name: Specifies the service's name
+         :return: Database object
+         """
+        result = Engine.get_service(session=session, port=port, protocol_type=protocol_type, host=host)
+        if not result:
+            result = Service(port=port,
+                             protocol=protocol_type,
+                             name=name,
+                             host=host)
+            session.add(result)
+            session.flush()
+        return result
+
+    @staticmethod
+    def get_path(session: Session,
+                 service: Service,
+                 name: str) -> Path:
+        """
+        This method should be used to obtain a path object from the database
+        :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+        :param service: The service object to which the path belongs
+        :param name: The path that shall be returned
+        :return: Database object
+        """
+        return session.query(Path).filter_by(name=name, service_id=service.id).one_or_none()
+
+    @staticmethod
+    def add_path(session: Session,
+                 service: Service,
+                 name: str,
+                 file: File,
+                 access_time: DateTime = None,
+                 modified_time: DateTime = None,
+                 creation_time: DateTime = None) -> Path:
+        """
+        This method should be used to add a path to the database
+        :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+        :param service: The service object to which the path belongs
+        :param name: The path that shall be added
+        :param file: The file object to which the path points to
+        :param access_time: The file's last access time
+        :param modified_time: The file's last modified time
+        :param creation_time: The file's creation time
+        :return: Database object
+        """
+        result = Engine.get_path(session=session, service=service, name=name)
+        if not result:
+            extension = os.path.splitext(name)[1]
+            result = Path(service=service,
+                          name=name,
+                          extension=extension,
+                          file=file,
+                          access_time=access_time,
+                          modified_time=modified_time,
+                          creation_time=creation_time)
+            session.add(result)
+            session.flush()
+        return result
+
+    @staticmethod
+    def get_file(session: Session,
+                 workspace: Workspace,
+                 sha256_value: str) -> File:
+        """
+        This method should be used to obtain a file object from the database
+        :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+        :param sha256_value: The sha256 value of the file
+        :return: Database object
+        """
+        return session.query(File).filter_by(sha256_value=sha256_value, workspace_id=workspace.id)
+
+    @staticmethod
+    def add_file(session: Session,
+                 workspace: Workspace,
+                 file: File) -> File:
+        """
+        This method should be used to add a file to the database
+        :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+        :param workspace: The workspace to which the network shall be added
+        :param sha256_value: The sha256 value of the file
+        :param relevance: Specifies the potential relevance of the file for the penetration test
+        :param matches: Contains the rules that classified the file as potentially relevant
+        :param content: The file's actual content
+        :param file_type: The files content type, which is determined by the magic library.
+        :return: Database object
+        """
+        result = Engine.get_file(session=session, workspace=workspace, sha256_value=file.sha256_value)
+        if not result:
+            session.add(file)
+            session.flush()
+        else:
+            updated = False
+            if not result.content and file.content:
+                updated = True
+                result.content = file.content
+            if result.review_result != file.review_result:
+                updated = True
+                result.review_result = file.review_result
+            if updated:
+                session.flush()
+        return result
+
+    @staticmethod
+    def get_match_rule(session: Session,
+                       search_location: SearchLocation,
+                       search_pattern: str) -> MatchRule:
+        """
+        This method should be used to obtain a match rule object from the database
+        :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+        :param search_location: The match rule's search location
+        :param search_pattern: The match rule's search pattern
+        :return: Database object
+        """
+        return session.query(MatchRule).filter_by(search_location=search_location, search_pattern=search_pattern.id)
+
+    @staticmethod
+    def add_match_rule(session: Session,
+                       search_location: SearchLocation,
+                       search_pattern: str,
+                       relevance: FileRelevance) -> MatchRule:
+        """
+        This method should be used to add a match rule to the database
+        :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+        :param search_location: The match rule's search location
+        :param search_pattern: The match rule's search pattern
+        :param relevance: The potential relevance of the file based on the given match rule
+        :return: Database object
+        """
+        result = Engine.get_match_rule(session=session,
+                                       search_location=search_location,
+                                       search_pattern=search_pattern)
+        if not result:
+            result = MatchRule(search_location, search_pattern, relevance)
+            session.add(result)
+            session.flush()
+        return result
+
+    @staticmethod
+    def add_match_rule_to_file(file: File,
+                               match_rule: MatchRule) -> None:
+        """
+        This method adds the given match rule to the file
+        :param file: The file to which the match rule shall be added.
+        :param match_rule: The match rule that shall be added to the file
+        :return:
+        """
+        if match_rule not in file.matches:
+            file.matches.append(match_rule)
 
 
 class ManageDatabase:

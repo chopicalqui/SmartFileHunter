@@ -24,13 +24,9 @@ __version__ = 0.1
 
 import os
 import hashlib
+import magic
 import enum
-import urllib
 import logging
-import subprocess
-import ipaddress
-import re
-import pwd
 import sqlalchemy as sa
 from sqlalchemy import Column
 from sqlalchemy import Integer
@@ -38,25 +34,18 @@ from sqlalchemy import String
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
 from sqlalchemy import Text
-from sqlalchemy import Boolean
-from sqlalchemy import Table
 from sqlalchemy import Enum
+from sqlalchemy import Table
 from sqlalchemy.ext.mutable import Mutable
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import backref
 from sqlalchemy import UniqueConstraint
-from sqlalchemy import CheckConstraint
-from sqlalchemy.dialects.postgresql import MACADDR
 from sqlalchemy.dialects.postgresql import INET
-from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import BYTEA
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
-from datetime import timedelta
-from typing import List
-from typing import Dict
-from urllib.parse import urlparse
 
 DeclarativeBase = declarative_base()
 
@@ -71,6 +60,25 @@ class WorkspaceNotFound(Exception):
 class ProtocolType(enum.Enum):
     udp = enum.auto()
     tcp = enum.auto()
+
+
+class ReviewResult(enum.Enum):
+    unreviewed = enum.auto()
+    irrelevant = enum.auto()
+    relevant = enum.auto()
+    tbd = enum.auto()
+
+
+class FileRelevance(enum.Enum):
+    low = enum.auto()
+    medium = enum.auto()
+    high = enum.auto()
+
+
+class SearchLocation(enum.Enum):
+    file_name = enum.auto()
+    directory_name = enum.auto()
+    file_content = enum.auto()
 
 
 class CastingArray(ARRAY):
@@ -117,14 +125,14 @@ class MutableDict(Mutable, dict):
         self.changed()
 
 
-path_file_mapping = Table("path_file_mapping", DeclarativeBase.metadata,
-                          Column("id", Integer, primary_key=True),
-                          Column("path_id", Integer, ForeignKey('path.id',
-                                                                ondelete='cascade'), nullable=False),
-                          Column("file_id", Integer, ForeignKey('file.id',
-                                                                ondelete='cascade'), nullable=False),
-                          Column("creation_date", DateTime, nullable=False, default=datetime.utcnow()),
-                          Column("last_modified", DateTime, nullable=True, onupdate=datetime.utcnow()))
+file_match_rule_mapping = Table("file_match_rule_mapping", DeclarativeBase.metadata,
+                                Column("id", Integer, primary_key=True),
+                                Column("file_id", Integer, ForeignKey('file.id',
+                                                                      ondelete='cascade'), nullable=False),
+                                Column("match_rule_id", Integer, ForeignKey('match_rule.id',
+                                                                            ondelete='cascade'), nullable=False),
+                                Column("creation_date", DateTime, nullable=False, default=datetime.utcnow()),
+                                Column("last_modified", DateTime, nullable=True, onupdate=datetime.utcnow()))
 
 
 class Workspace(DeclarativeBase):
@@ -139,7 +147,7 @@ class Workspace(DeclarativeBase):
                          order_by="asc(Host.address)")
     files = relationship("File",
                          backref=backref("workspace"),
-                         cascade="delete, delete-orphan",
+                         cascade="all",
                          order_by="desc(File.size_bytes)")
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
@@ -185,16 +193,18 @@ class Path(DeclarativeBase):
     __tablename__ = "path"
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False, unique=False)
+    extension = Column(Text, nullable=False, unique=False)
     access_time = Column(DateTime, nullable=True)
     modified_time = Column(DateTime, nullable=True)
     creation_time = Column(DateTime, nullable=True)
-    size_bytes = Column(Integer, nullable=True, unique=False)
     service_id = Column(Integer, ForeignKey("service.id", ondelete='cascade'), nullable=False, unique=False)
+    file_id = Column(Integer, ForeignKey("file.id", ondelete='cascade'), nullable=True, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
-    files = relationship("File",
-                         secondary=path_file_mapping,
-                         backref=backref("paths", order_by="desc(File.size_bytes)"))
+    file = relationship("File",
+                        backref=backref("paths"),
+                        cascade="all",
+                        order_by="desc(File.size_bytes)")
     __table_args__ = (UniqueConstraint('name', 'service_id', name='_path_unique'),)
 
 
@@ -203,9 +213,43 @@ class File(DeclarativeBase):
 
     __tablename__ = "file"
     id = Column(Integer, primary_key=True)
-    content = Column(BYTEA, nullable=False, unique=False)
+    _content = Column("content", BYTEA, nullable=True, unique=False)
     size_bytes = Column(Integer, nullable=False, unique=False)
     sha256_value = Column(Text, nullable=False, unique=False)
-    file_type = Column(Text, nullable=False, unique=False)
+    file_type = Column(Text, nullable=True, unique=False)
+    mime_type = Column(Text, nullable=True, unique=False)
+    review_result = Column(Enum(ReviewResult), nullable=False, unique=False, default=ReviewResult.unreviewed)
     workspace_id = Column(Integer, ForeignKey("workspace.id", ondelete='cascade'), nullable=False, unique=False)
+    creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
+    last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
     __table_args__ = (UniqueConstraint('sha256_value', 'workspace_id', name='_file_unique'),)
+    matches = relationship("Path",
+                           secondary=file_match_rule_mapping,
+                           backref=backref("files",
+                                           order_by="asc(MatchRule.search_location, MatchRule.search_pattern)"))
+    @property
+    def content(self) -> bytes:
+        return self._content
+
+    @content.setter
+    def content(self, value: bytes):
+        self._content = value
+        self.sha256_value = hashlib.sha256(value).hexdigest()
+        self.file_type = magic.from_buffer(value)
+        self.mime_type = magic.from_buffer(value, mime=True)
+
+
+class MatchRule(DeclarativeBase):
+    """This class holds all files"""
+
+    __tablename__ = "match_rule"
+    id = Column(Integer, primary_key=True)
+    search_location = Column(Enum(SearchLocation), nullable=False, unique=False)
+    search_pattern = Column(Text, nullable=False, unique=False)
+    relevance = Column(Enum(FileRelevance), nullable=False, unique=False)
+    creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
+    last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
+    __table_args__ = (UniqueConstraint('search_location', 'search_pattern', name='_match_rule_unique'),)
+
+    def __eq__(self, value):
+        return self.search_location == value.search_location and self.search_pattern == value.search_pattern
