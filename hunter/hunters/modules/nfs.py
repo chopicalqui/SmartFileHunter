@@ -36,7 +36,7 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, service_name="nfs", **kwargs)
+        super().__init__(args, port=args.port, service_name="nfs", **kwargs)
         self.path = args.path
         self.version = args.version
         self.connection_string = "nfs://{}/{}?version={}&nfsport={}".format(self.service.host.address,

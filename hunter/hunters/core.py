@@ -40,14 +40,16 @@ class BaseSensitiveFileHunter:
                  args: argparse.Namespace,
                  file_queue: Queue, temp_dir,
                  config: FileHunterConfig,
+                 port: int,
                  service_name: str,
                  engine: Engine,
                  **kwargs):
-        self.service = Service(port=args.port, name=service_name)
+        self.service = Service(port=port, name=service_name)
         self.service.host = Host(address=args.host)
         self.service.workspace = Workspace(name=args.workspace)
         self.verbose = args.verbose
         self.config = config
+        self.port = port
         self.temp_dir = temp_dir
         self.file_queue = file_queue
         self.file_size_threshold = self.config.config["general"].getint("max_file_size_kb")
@@ -58,7 +60,7 @@ class BaseSensitiveFileHunter:
                                    workspace=workspace,
                                    address=args.host)
             engine.add_service(session=session,
-                               port=args.port,
+                               port=port,
                                name=service_name,
                                host=host)
 

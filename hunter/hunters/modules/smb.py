@@ -28,7 +28,6 @@ import logging
 import argparse
 import tempfile
 import datetime
-from io import StringIO
 from database.model import Path
 from database.model import File
 from impacket.smbconnection import SMB_DIALECT
@@ -48,7 +47,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, service_name="smb", **kwargs)
+        super().__init__(args, port=args.port, service_name="smb", **kwargs)
         self.username = args.username
         if args.password:
             self.password = args.password
@@ -107,7 +106,6 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                 logger.debug("enumerate share: {}".format(name))
                 self._enumerate(name)
             except SessionError as ex:
-                #logger.exception(ex)
                 pass
             except Exception as ex:
                 if "STATUS_ACCESS_DENIED" not in str(ex):
@@ -130,12 +128,14 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                                 access_time=datetime.datetime.utcfromtimestamp(item.get_atime_epoch()),
                                 modified_time=datetime.datetime.utcfromtimestamp(item.get_mtime_epoch()),
                                 creation_time=datetime.datetime.utcfromtimestamp(item.get_ctime_epoch()))
+                    # Obtain file content
                     with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
                         with open(temp.name, "wb") as file:
                             self.client.getFile(share, full_path, file.write, FILE_SHARE_READ)
                         with open(temp.name, "rb") as file:
                             content = file.read()
                     path.file = File(content=content)
+                    # Add file to queue
                     if path.file.size_bytes > 0:
                         logger.debug("enqueue file: {}".format(path.full_path))
                         self.file_queue.put(path)

@@ -22,9 +22,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
+import os
 import ftplib
 import logging
 import argparse
+import tempfile
+from datetime import datetime
+from database.model import Path
+from database.model import File
 from hunters.core import BaseSensitiveFileHunter
 
 logger = logging.getLogger('ftp')
@@ -36,7 +41,7 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, service_name="ftp", **kwargs)
+        super().__init__(args, port=21, service_name="ftp", **kwargs)
         self.username = args.username
         self.password = args.password
         self.tls = args.tls
@@ -49,3 +54,35 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
 
     def __del__(self):
         self.client.close()
+
+    def enumerate(self, cwd: str = None) -> None:
+        """
+        This method enumerates all files on the given service.
+        :return:
+        """
+        cwd = self.client.pwd() if not cwd else cwd
+        for name, facts in self.client.mlsd(cwd):
+            full_path = os.path.join(cwd, name)
+            item_type = facts["type"]
+            file_size = int(facts["size"]) if "size" in facts else 0
+            if item_type == "dir":
+                self.enumerate(os.path.join(cwd, full_path))
+            elif item_type == "file" and self.is_file_size_below_threshold(file_size):
+                last_modified = facts["modify"]
+                modified_time = datetime.strptime(last_modified + "Z", '%Y%m%d%H%M%SZ') if last_modified else None
+                path = Path(service=self.service,
+                            full_path=full_path,
+                            modified_time=modified_time)
+                # Obtain file content
+                with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
+                    with open(temp.name, "wb") as file:
+                        self.client.retrbinary('RETR {}'.format(full_path), file.write)
+                    with open(temp.name, "rb") as file:
+                        content = file.read()
+                path.file = File(content=content)
+                # Add file to queue
+                if path.file.size_bytes > 0:
+                    logger.debug("enqueue file: {}".format(path.full_path))
+                    self.file_queue.put(path)
+            else:
+                logger.debug("skip type item: {} (type: {})".format(name, item_type))

@@ -28,6 +28,7 @@ from queue import Queue
 from threading import Thread
 from database.core import Engine
 from database.model import Path
+from database.model import File
 from database.model import MatchRule
 from database.model import SearchLocation
 from database.model import FileRelevance
@@ -65,7 +66,12 @@ class FileAnalzer(Thread):
             self._number_of_processed_files += 1
             self.file_queue.task_done()
 
-    def add_content(self, rule: MatchRule, path: Path):
+    def add_content(self, path: Path, rule: MatchRule = None, file: File = None):
+        if rule and file:
+            raise ValueError("parameters rule and file are mutual exclusive")
+        elif not rule and not file:
+            raise ValueError("either parameter rule or file must be given")
+
         with self.engine.session_scope() as session:
             workspace = self.engine.get_workspace(session, name=self.workspace)
             host = self.engine.add_host(session=session,
@@ -75,15 +81,16 @@ class FileAnalzer(Thread):
                                               port=path.service.port,
                                               name=path.service.name,
                                               host=host)
-            match_file = self.engine.add_match_rule(session=session,
-                                                    search_location=rule.search_location,
-                                                    search_pattern=rule.search_pattern,
-                                                    relevance=rule.relevance,
-                                                    category=rule.category)
-            file = self.engine.add_file(session=session,
-                                        workspace=workspace,
-                                        file=path.file)
-            file.add_match_rule(match_file)
+            if rule:
+                match_file = self.engine.add_match_rule(session=session,
+                                                        search_location=rule.search_location,
+                                                        search_pattern=rule.search_pattern,
+                                                        relevance=rule.relevance,
+                                                        category=rule.category)
+                file = self.engine.add_file(session=session,
+                                            workspace=workspace,
+                                            file=path.file)
+                file.add_match_rule(match_file)
             self.engine.add_path(session=session,
                                  service=service,
                                  full_path=path.full_path,
@@ -117,7 +124,7 @@ class FileAnalzer(Thread):
         for rule in self.config.matching_rules[SearchLocation.file_name.name]:
             if rule.is_match(path):
                 result = rule.relevance
-                self.add_content(rule, path)
+                self.add_content(rule=rule, path=path)
                 break
         return result
 
@@ -129,9 +136,12 @@ class FileAnalzer(Thread):
         """
         with self.engine.session_scope() as session:
             workspace = self.engine.get_workspace(session=session, name=self.workspace)
-            exists = self.engine.get_file(session=session,
-                                          workspace=workspace,
-                                          sha256_value=path.file.sha256_value) is not None
+            file = self.engine.get_file(session=session,
+                                        workspace=workspace,
+                                        sha256_value=path.file.sha256_value)
+            exists = file is not None
+            if exists:
+                self.add_content(path=path, file=file)
         if not exists:
             if "ASCII text" in path.file.file_type:
                 # First analyze the file's content

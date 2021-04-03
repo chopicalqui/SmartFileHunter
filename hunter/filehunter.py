@@ -91,8 +91,9 @@ if __name__ == "__main__":
                                              metavar="PASSWORD", help='password of given user')
     # setup FTP parser
     parser_ftp.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
-    parser_ftp.add_argument('-t', '--tls', action="store_true", help='use TLS')
+    parser_ftp.add_argument('--tls', action="store_true", help='use TLS')
     parser_ftp.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
+    parser_ftp.add_argument('-t', '--threads', type=int, default=5, help='number of analysis threads')
     ftp_target_group = parser_ftp.add_argument_group('target information')
     ftp_target_group.add_argument('--host', type=str, metavar="HOST", help="the target FTP service's IP address")
     ftp_authentication_group = parser_ftp.add_argument_group('authentication')
@@ -104,6 +105,7 @@ if __name__ == "__main__":
     parser_nfs.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_nfs.add_argument('--version', type=int, choices=[3, 4], default=3, help='NFS version to use')
     parser_nfs.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
+    parser_nfs.add_argument('-t', '--threads', type=int, default=5, help='number of analysis threads')
     nfs_target_group = parser_nfs.add_argument_group('target information')
     nfs_target_group.add_argument('--host', type=str, metavar="HOST", help="the target NFS service's IP address")
     nfs_target_group.add_argument('--port', type=int, default=445, metavar="PORT", help="the target NFS service's port")
