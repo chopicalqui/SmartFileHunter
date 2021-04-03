@@ -40,6 +40,8 @@ class FileAnalzer(Thread):
     """
     This class is responsible for analysing a given file.
     """
+    ID = 0
+
     def __init__(self,
                  args: argparse.Namespace,
                  engine: Engine,
@@ -51,11 +53,14 @@ class FileAnalzer(Thread):
         self.engine = engine
         self.config = config
         self.file_queue = file_queue
+        self._id = self.ID
+        self.ID += 1
         self._number_of_processed_files = 0
 
     def run(self):
         while True:
             path = self.file_queue.get()
+            logger.debug("thread {} dequeues path: {}".format(self._id, path.full_path))
             self.analyze(path)
             self._number_of_processed_files += 1
             self.file_queue.task_done()
@@ -111,10 +116,6 @@ class FileAnalzer(Thread):
         result = None
         for rule in self.config.matching_rules[SearchLocation.file_name.name]:
             if rule.is_match(path):
-                result = rule.relevance
-                self.add_content(rule, path)
-                break
-            elif rule.is_match(path):
                 result = rule.relevance
                 self.add_content(rule, path)
                 break

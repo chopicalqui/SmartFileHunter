@@ -58,7 +58,6 @@ class WorkspaceNotFound(Exception):
 
 
 class ReviewResult(enum.Enum):
-    unreviewed = enum.auto()
     irrelevant = enum.auto()
     relevant = enum.auto()
     tbd = enum.auto()
@@ -229,7 +228,7 @@ class File(DeclarativeBase):
     sha256_value = Column(Text, nullable=False, unique=False)
     file_type = Column(Text, nullable=True, unique=False)
     mime_type = Column(Text, nullable=True, unique=False)
-    review_result = Column(Enum(ReviewResult), nullable=False, unique=False, default=ReviewResult.unreviewed)
+    review_result = Column(Enum(ReviewResult), nullable=True, unique=False)
     workspace_id = Column(Integer, ForeignKey("workspace.id", ondelete='cascade'), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())

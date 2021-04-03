@@ -44,6 +44,7 @@ logger = logging.getLogger("main")
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-l", "--list", action='store_true', help="list existing workspaces")
+    parser.add_argument("-d", "--debug", action='store_true', help="print debug messages to standard output")
     sub_parser = parser.add_subparsers(help='list of available file hunter modules', dest="module")
     parser_database = sub_parser.add_parser('db', help='allows setting up and managing the database')
     parser_smb = sub_parser.add_parser('smb', help='enumerate SMB services')
@@ -79,9 +80,9 @@ if __name__ == "__main__":
                                   help="list of shares to enumerate. if not specified, then all shares will be "
                                        "enumerated.")
     smb_authentication_group = parser_smb.add_argument_group('authentication')
-    smb_authentication_group.add_argument('-u', '--username', action="store", required=True,
+    smb_authentication_group.add_argument('-u', '--username', required=True, type=str,
                                           metavar="USERNAME", help='the name of the user to use for authentication')
-    smb_authentication_group.add_argument('-d', '--domain', action="store", required=True,
+    smb_authentication_group.add_argument('-d', '--domain', default=".", type=str,
                                           metavar="DOMAIN", help='the domain to use for authentication')
     parser_smb_credential_group = smb_authentication_group.add_mutually_exclusive_group(required=True)
     parser_smb_credential_group.add_argument('--hash', action="store",
@@ -108,6 +109,14 @@ if __name__ == "__main__":
     nfs_target_group.add_argument('--port', type=int, default=445, metavar="PORT", help="the target NFS service's port")
     nfs_target_group.add_argument('--path', type=str, metavar="PATH", help="path to enumerate")
     args = parser.parse_args()
+
+    level = logging.DEBUG if args.debug else logging.INFO
+    handlers = [logging.StreamHandler()]
+
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        level=level,
+                        handlers=handlers)
 
     if len(sys.argv) <= 1:
         parser.print_help()

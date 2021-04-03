@@ -349,8 +349,7 @@ class Engine:
                           sha256_value=file.sha256_value,
                           file_type=file.file_type,
                           size_bytes=file.size_bytes,
-                          mime_type=file.mime_type,
-                          review_result=ReviewResult.unreviewed)
+                          mime_type=file.mime_type)
             session.add(result)
             session.flush()
         else:

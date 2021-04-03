@@ -28,12 +28,14 @@ import logging
 import argparse
 import tempfile
 import datetime
+from io import StringIO
 from database.model import Path
 from database.model import File
 from impacket.smbconnection import SMB_DIALECT
 from impacket.smbconnection import SMB2_DIALECT_002
 from impacket.smbconnection import SMB2_DIALECT_21
 from impacket.smbconnection import SMBConnection
+from impacket.smbconnection import SessionError
 from impacket.smbconnection import FILE_SHARE_READ
 from hunters.core import BaseSensitiveFileHunter
 
@@ -102,13 +104,18 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         """
         for name, _ in self.shares:
             try:
+                logger.debug("enumerate share: {}".format(name))
                 self._enumerate(name)
+            except SessionError as ex:
+                #logger.exception(ex)
+                pass
             except Exception as ex:
                 if "STATUS_ACCESS_DENIED" not in str(ex):
                     logger.exception(ex)
 
     def _enumerate(self, share: str, directory: str = "/") -> None:
-        for item in self.client.listPath(share, self.pathify(directory)):
+        items = self.client.listPath(share, self.pathify(directory))
+        for item in items:
             file_size = item.get_filesize()
             filename = item.get_longname()
             is_directory = item.is_directory()
@@ -128,5 +135,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                             self.client.getFile(share, full_path, file.write, FILE_SHARE_READ)
                         with open(temp.name, "rb") as file:
                             content = file.read()
-                    path.file = File(content=content, size_bytes=file_size)
-                    self.file_queue.put(path)
+                    path.file = File(content=content)
+                    if path.file.size_bytes > 0:
+                        logger.debug("enqueue file: {}".format(path.full_path))
+                        self.file_queue.put(path)

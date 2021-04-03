@@ -23,7 +23,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import datetime
-from test.core import BaseTestCase
 from test.core import BaseDataModelTestCase
 from database.model import Workspace
 from database.model import Host
@@ -31,6 +30,8 @@ from database.model import Service
 from database.model import Path
 from database.model import File
 from database.model import MatchRule
+from database.model import SearchLocation
+from database.model import FileRelevance
 
 
 class TestWorkspace(BaseDataModelTestCase):
@@ -136,6 +137,64 @@ class TestService(BaseDataModelTestCase):
                                host=host)
 
 
+class TestFile(BaseDataModelTestCase):
+    """
+    Test data model for file
+    """
+
+    def __init__(self, test_name: str):
+        super().__init__(test_name, File)
+
+    def test_unique_constraint(self):
+        self.init_db()
+        with self._engine.session_scope() as session:
+            workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
+            self._test_unique_constraint(session=session,
+                                         workspace=workspace,
+                                         size_bytes=0,
+                                         sha256_value='asdf')
+
+    def test_not_null_constraint(self):
+        self.init_db()
+        with self._engine.session_scope() as session:
+            workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
+            self._test_not_null_constraint(session=session,
+                                           size_bytes=0,
+                                           sha256_value='asdf')
+            self._test_not_null_constraint(session=session,
+                                           workspace=workspace,
+                                           sha256_value='asdf')
+            self._test_not_null_constraint(session=session,
+                                           workspace=workspace,
+                                           size_bytes=0)
+
+    def test_check_constraint(self):
+        self.init_db()
+        with self._engine.session_scope() as session:
+            pass
+
+    def test_success(self):
+        self.init_db()
+        with self._engine.session_scope() as session:
+            workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
+            self._test_success(session=session,
+                               workspace=workspace,
+                               size_bytes=0,
+                               sha256_value='asdf')
+
+    def test_properties(self):
+        file = File(content=b"""<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <connectionStrings>
+    <add name="myConnectionString" connectionString="server=localhost;database=myDb;uid=myUser;password=myPass;" />
+  </connectionStrings>
+</configuration>""")
+        self.assertEqual('XML 1.0 document, ASCII text', file.file_type)
+        self.assertEqual('text/xml', file.mime_type)
+        self.assertEqual('9773eb31e10323ab04bd846a0da237a4652ec56a09c991ce9dc0c2439a5d023b', file.sha256_value)
+        self.assertEqual(232, file.size_bytes)
+
+
 class TestPath(BaseDataModelTestCase):
     """
     Test data model for path
@@ -185,3 +244,47 @@ class TestPath(BaseDataModelTestCase):
                                modified_time=datetime.datetime.utcnow(),
                                creation_time=datetime.datetime.utcnow(),
                                full_path="/tmp")
+
+
+class TestMatchRule(BaseDataModelTestCase):
+    """
+    Test data model for workspace
+    """
+
+    def __init__(self, test_name: str):
+        super().__init__(test_name, MatchRule)
+
+    def test_unique_constraint(self):
+        self.init_db()
+        with self._engine.session_scope() as session:
+            self._test_unique_constraint(session,
+                                         search_location=SearchLocation.file_name,
+                                         relevance=FileRelevance.high,
+                                         search_pattern=".*")
+
+    def test_not_null_constraint(self):
+        self.init_db()
+        with self._engine.session_scope() as session:
+            self._test_not_null_constraint(session,
+                                           relevance=FileRelevance.high,
+                                           search_pattern=".*")
+            self._test_not_null_constraint(session,
+                                           search_location=SearchLocation.file_name,
+                                           search_pattern=".*")
+            self._test_not_null_constraint(session,
+                                           search_location=SearchLocation.file_name,
+                                           relevance=FileRelevance.high)
+
+    def test_check_constraint(self):
+        self.init_db()
+        with self._engine.session_scope() as session:
+            pass
+
+    def test_success(self):
+        self.init_db()
+        with self._engine.session_scope() as session:
+            self._test_success(session,
+                               search_location=SearchLocation.file_name,
+                               category="test",
+                               relevance=FileRelevance.high,
+                               search_pattern=".*")
