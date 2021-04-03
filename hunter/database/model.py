@@ -173,7 +173,7 @@ class Service(DeclarativeBase):
 
     __tablename__ = "service"
     id = Column(Integer, primary_key=True)
-    port = Column(Integer, nullable=False, unique=False)
+    port = Column(Integer, nullable=True, unique=False)
     name = Column(String(10), nullable=False, unique=False)
     host_id = Column(Integer, ForeignKey("host.id", ondelete='cascade'), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())

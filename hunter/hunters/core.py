@@ -40,16 +40,18 @@ class BaseSensitiveFileHunter:
                  args: argparse.Namespace,
                  file_queue: Queue, temp_dir,
                  config: FileHunterConfig,
-                 port: int,
+                 address: str,
                  service_name: str,
                  engine: Engine,
+                 port: int = None,
                  **kwargs):
         self.service = Service(port=port, name=service_name)
-        self.service.host = Host(address=args.host)
+        self.service.host = Host(address=address)
         self.service.workspace = Workspace(name=args.workspace)
         self.verbose = args.verbose
         self.config = config
         self.port = port
+        self.address = address
         self.temp_dir = temp_dir
         self.file_queue = file_queue
         self.file_size_threshold = self.config.config["general"].getint("max_file_size_kb")
@@ -58,14 +60,21 @@ class BaseSensitiveFileHunter:
             workspace = engine.get_workspace(session, name=args.workspace)
             host = engine.add_host(session=session,
                                    workspace=workspace,
-                                   address=args.host)
+                                   address=address)
             engine.add_service(session=session,
                                port=port,
                                name=service_name,
                                host=host)
+            for match_rules in self.config.matching_rules.values():
+                for match_rule in match_rules:
+                    engine.add_match_rule(session=session,
+                                          search_location=match_rule.search_location,
+                                          search_pattern=match_rule.search_pattern,
+                                          relevance=match_rule.relevance,
+                                          category=match_rule.category)
 
     def is_file_size_below_threshold(self, size: int) -> bool:
-        return self.file_size_threshold <= 0 or size <= self.file_size_threshold
+        return size > 0 and (self.file_size_threshold <= 0 or size <= self.file_size_threshold)
 
     def enumerate(self):
         """

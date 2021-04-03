@@ -25,6 +25,7 @@ __version__ = 0.1
 import logging
 import argparse
 from queue import Queue
+from threading import Lock
 from threading import Thread
 from database.core import Engine
 from database.model import Path
@@ -35,6 +36,8 @@ from database.model import FileRelevance
 from config.config import FileHunter as FileHunterConfig
 
 logger = logging.getLogger('analyzer')
+
+mutex = Lock()
 
 
 class FileAnalzer(Thread):
@@ -71,34 +74,34 @@ class FileAnalzer(Thread):
             raise ValueError("parameters rule and file are mutual exclusive")
         elif not rule and not file:
             raise ValueError("either parameter rule or file must be given")
-
-        with self.engine.session_scope() as session:
-            workspace = self.engine.get_workspace(session, name=self.workspace)
-            host = self.engine.add_host(session=session,
-                                        workspace=workspace,
-                                        address=path.service.host.address)
-            service = self.engine.add_service(session=session,
-                                              port=path.service.port,
-                                              name=path.service.name,
-                                              host=host)
-            if rule:
-                match_file = self.engine.add_match_rule(session=session,
-                                                        search_location=rule.search_location,
-                                                        search_pattern=rule.search_pattern,
-                                                        relevance=rule.relevance,
-                                                        category=rule.category)
-                file = self.engine.add_file(session=session,
+        with mutex:
+            with self.engine.session_scope() as session:
+                workspace = self.engine.get_workspace(session, name=self.workspace)
+                host = self.engine.add_host(session=session,
                                             workspace=workspace,
-                                            file=path.file)
-                file.add_match_rule(match_file)
-            self.engine.add_path(session=session,
-                                 service=service,
-                                 full_path=path.full_path,
-                                 share=path.share,
-                                 file=file,
-                                 access_time=path.access_time,
-                                 modified_time=path.modified_time,
-                                 creation_time=path.creation_time)
+                                            address=path.service.host.address)
+                service = self.engine.add_service(session=session,
+                                                  port=path.service.port,
+                                                  name=path.service.name,
+                                                  host=host)
+                if rule:
+                    match_file = self.engine.add_match_rule(session=session,
+                                                            search_location=rule.search_location,
+                                                            search_pattern=rule.search_pattern,
+                                                            relevance=rule.relevance,
+                                                            category=rule.category)
+                    file = self.engine.add_file(session=session,
+                                                workspace=workspace,
+                                                file=path.file)
+                    file.add_match_rule(match_file)
+                self.engine.add_path(session=session,
+                                     service=service,
+                                     full_path=path.full_path,
+                                     share=path.share,
+                                     file=file,
+                                     access_time=path.access_time,
+                                     modified_time=path.modified_time,
+                                     creation_time=path.creation_time)
 
     def _analyze_content(self, path: Path) -> FileRelevance:
         """

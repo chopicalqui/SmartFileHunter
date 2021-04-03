@@ -41,7 +41,7 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, port=21, service_name="ftp", **kwargs)
+        super().__init__(args, address=args.host, port=21, service_name="ftp", **kwargs)
         self.username = args.username
         self.password = args.password
         self.tls = args.tls
@@ -69,7 +69,8 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
                 self.enumerate(os.path.join(cwd, full_path))
             elif item_type == "file" and self.is_file_size_below_threshold(file_size):
                 last_modified = facts["modify"]
-                modified_time = datetime.strptime(last_modified + "Z", '%Y%m%d%H%M%SZ') if last_modified else None
+                modified_time = datetime.strptime(last_modified, '%Y%m%d%H%M%S') \
+                    if last_modified else None
                 path = Path(service=self.service,
                             full_path=full_path,
                             modified_time=modified_time)
@@ -81,8 +82,7 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
                         content = file.read()
                 path.file = File(content=content)
                 # Add file to queue
-                if path.file.size_bytes > 0:
-                    logger.debug("enqueue file: {}".format(path.full_path))
-                    self.file_queue.put(path)
+                logger.debug("enqueue file: {}".format(path.full_path))
+                self.file_queue.put(path)
             else:
                 logger.debug("skip type item: {} (type: {})".format(name, item_type))

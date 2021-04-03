@@ -332,6 +332,7 @@ class Engine:
         result = Engine.get_file(session=session, workspace=workspace, sha256_value=file.sha256_value)
         if not result:
             result = File(workspace_id=workspace.id,
+                          _content=file.content,
                           sha256_value=file.sha256_value,
                           file_type=file.file_type,
                           size_bytes=file.size_bytes,

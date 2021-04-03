@@ -22,9 +22,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
+import os
+import stat
 import libnfs
 import logging
 import argparse
+from datetime import datetime
+from datetime import timezone
+from database.model import Path
+from database.model import File
 from hunters.core import BaseSensitiveFileHunter
 
 logger = logging.getLogger('nfs')
@@ -36,10 +42,35 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, port=args.port, service_name="nfs", **kwargs)
+        super().__init__(args, address=args.host, port=args.port, service_name="nfs", **kwargs)
         self.path = args.path
         self.version = args.version
         self.connection_string = "nfs://{}/{}?version={}&nfsport={}".format(self.service.host.address,
                                                                             self.path,
                                                                             self.version,
                                                                             self.service.port)
+        self.client = libnfs.NFS(self.connection_string)
+
+    def enumerate(self, cwd: str = "") -> None:
+        """
+        This method enumerates all files on the given service.
+        :return:
+        """
+        items = self.client.listdir(cwd)
+        for item in items:
+            if item not in [".", ".."]:
+                full_path = os.path.join(cwd, item)
+                stats = self.client.stat(full_path)
+                file_size = stats['size']
+                if stat.S_ISDIR(stats['mode']):
+                    self.enumerate(full_path)
+                elif self.is_file_size_below_threshold(file_size):
+                    path = Path(service=self.service,
+                                full_path=item,
+                                access_time=datetime.fromtimestamp(stats['atime']['sec'], tz=timezone.utc),
+                                modified_time=datetime.fromtimestamp(stats['mtime']['sec'], tz=timezone.utc),
+                                creation_time=datetime.fromtimestamp(stats['ctime']['sec'], tz=timezone.utc))
+                    content = self.client.open(full_path, mode='rb').read()
+                    path.file = File(content=bytes(content))
+                    logger.debug("enqueue file: {}".format(path.full_path))
+                    self.file_queue.put(path)

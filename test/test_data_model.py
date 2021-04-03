@@ -117,9 +117,8 @@ class TestService(BaseDataModelTestCase):
             workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
             host = self._engine.add_host(session, workspace=workspace, address="127.0.0.1")
             self._test_not_null_constraint(session)
-            self._test_not_null_constraint(session, name="smb", host=host)
-            self._test_not_null_constraint(session, port=445, host=host)
-            self._test_not_null_constraint(session, port=445, name="smb")
+            self._test_not_null_constraint(session, host=host)
+            self._test_not_null_constraint(session, name="smb")
 
     def test_check_constraint(self):
         self.init_db()
@@ -193,6 +192,7 @@ class TestFile(BaseDataModelTestCase):
         self.assertEqual('text/xml', file.mime_type)
         self.assertEqual('9773eb31e10323ab04bd846a0da237a4652ec56a09c991ce9dc0c2439a5d023b', file.sha256_value)
         self.assertEqual(232, file.size_bytes)
+        self.assertIn(b"server=localhost;database=myDb;uid=myUser;password=myPass;", file.content)
 
 
 class TestPath(BaseDataModelTestCase):
