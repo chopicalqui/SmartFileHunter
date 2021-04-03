@@ -241,7 +241,7 @@ class Engine:
     def add_service(session: Session,
                     port: int,
                     host: Host,
-                    name: str = None) -> Service:
+                    name: HunterType = None) -> Service:
         """
          This method should be used to add a service to the database
          :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects

@@ -24,6 +24,7 @@ __version__ = 0.1
 
 import datetime
 from test.core import BaseDataModelTestCase
+from database.model import HunterType
 from database.model import Workspace
 from database.model import Host
 from database.model import Service
@@ -109,7 +110,7 @@ class TestService(BaseDataModelTestCase):
         with self._engine.session_scope() as session:
             workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
             host = self._engine.add_host(session, workspace=workspace, address="127.0.0.1")
-            self._test_unique_constraint(session, port=445, name="smb", host=host)
+            self._test_unique_constraint(session, port=445, name=HunterType.smb, host=host)
 
     def test_not_null_constraint(self):
         self.init_db()
@@ -118,7 +119,7 @@ class TestService(BaseDataModelTestCase):
             host = self._engine.add_host(session, workspace=workspace, address="127.0.0.1")
             self._test_not_null_constraint(session)
             self._test_not_null_constraint(session, host=host)
-            self._test_not_null_constraint(session, name="smb")
+            self._test_not_null_constraint(session, name=HunterType.smb)
 
     def test_check_constraint(self):
         self.init_db()
@@ -132,8 +133,17 @@ class TestService(BaseDataModelTestCase):
             host = self._engine.add_host(session, workspace=workspace, address="127.0.0.1")
             self._test_success(session,
                                port=445,
-                               name="smb",
+                               name=HunterType.smb,
                                host=host)
+
+    def test_repr_without_host(self):
+        service = Service(name=HunterType.smb, port=445)
+        self.assertEqual("", str(service))
+
+    def test_repr_with_host(self):
+        host = Host(address="127.0.0.1")
+        service = Service(name=HunterType.smb, port=445, host=host)
+        self.assertEqual("smb://127.0.0.1:445", str(service))
 
 
 class TestFile(BaseDataModelTestCase):
@@ -208,7 +218,7 @@ class TestPath(BaseDataModelTestCase):
         with self._engine.session_scope() as session:
             workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
             host = self._engine.add_host(session, workspace=workspace, address="127.0.0.1")
-            service = self._engine.add_service(session, host=host, port=445, name="name")
+            service = self._engine.add_service(session, host=host, port=445, name=HunterType.smb)
             file = self._engine.add_file(session, workspace=workspace, file=File(content=b'test'))
             self._test_unique_constraint(session=session,
                                          service=service,
@@ -220,7 +230,7 @@ class TestPath(BaseDataModelTestCase):
         with self._engine.session_scope() as session:
             workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
             host = self._engine.add_host(session, workspace=workspace, address="127.0.0.1")
-            service = self._engine.add_service(session, host=host, port=445, name="name")
+            service = self._engine.add_service(session, host=host, port=445, name=HunterType.smb)
             file = self._engine.add_file(session, workspace=workspace, file=File(content=b'test'))
             self._test_not_null_constraint(session)
             self._test_not_null_constraint(session, service=service)
@@ -235,7 +245,7 @@ class TestPath(BaseDataModelTestCase):
         with self._engine.session_scope() as session:
             workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
             host = self._engine.add_host(session, workspace=workspace, address="127.0.0.1")
-            service = self._engine.add_service(session, host=host, port=445, name="name")
+            service = self._engine.add_service(session, host=host, port=445, name=HunterType.smb)
             file = self._engine.add_file(session, workspace=workspace, file=File(content=b'test'))
             self._test_success(session=session,
                                service=service,
@@ -244,6 +254,40 @@ class TestPath(BaseDataModelTestCase):
                                modified_time=datetime.datetime.utcnow(),
                                creation_time=datetime.datetime.utcnow(),
                                full_path="/tmp")
+
+    def test_repr_without_service(self):
+        path = Path(full_path="/IT/creds.txt")
+        self.assertEqual("", str(path))
+
+    def test_repr_without_host(self):
+        service = Service(name=HunterType.smb, port=445)
+        path = Path(full_path="/IT/creds.txt", service=service)
+        self.assertEqual("", str(path))
+
+    def test_repr_with_host_and_smb_service(self):
+        host = Host(address="127.0.0.1")
+        service = Service(name=HunterType.smb, port=445, host=host)
+        path = Path(full_path="/IT/creds.txt", share="$D", service=service)
+        self.assertEqual("smb://127.0.0.1:445($D)/IT/creds.txt", str(path))
+
+    def test_repr_with_host_and_ftp_service_01(self):
+        host = Host(address="127.0.0.1")
+        service = Service(name=HunterType.ftp, port=21, host=host)
+        path = Path(full_path="/IT/creds.txt", service=service)
+        self.assertEqual("ftp://127.0.0.1:21/IT/creds.txt", str(path))
+
+    def test_repr_with_host_and_ftp_service_02(self):
+        host = Host(address="127.0.0.1")
+        service = Service(name=HunterType.ftp, port=21, host=host)
+        path = Path(full_path="IT/creds.txt", service=service)
+        self.assertEqual("ftp://127.0.0.1:21/IT/creds.txt", str(path))
+
+    def test_repr_with_host_and_ftp_service_and_path_is_none(self):
+        host = Host(address="127.0.0.1")
+        service = Service(name=HunterType.ftp, port=21, host=host)
+        path = Path(service=service)
+        self.assertEqual("ftp://127.0.0.1:21", str(path))
+
 
 
 class TestMatchRule(BaseDataModelTestCase):

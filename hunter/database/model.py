@@ -57,6 +57,13 @@ class WorkspaceNotFound(Exception):
         super().__init__("workspace '{}' does not exist in database".format(workspace))
 
 
+class HunterType(enum.Enum):
+    smb = enum.auto()
+    ftp = enum.auto()
+    nfs = enum.auto()
+    local = enum.auto()
+
+
 class ReviewResult(enum.Enum):
     irrelevant = enum.auto()
     relevant = enum.auto()
@@ -174,7 +181,7 @@ class Service(DeclarativeBase):
     __tablename__ = "service"
     id = Column(Integer, primary_key=True)
     port = Column(Integer, nullable=True, unique=False)
-    name = Column(String(10), nullable=False, unique=False)
+    name = Column(Enum(HunterType), nullable=False, unique=False)
     host_id = Column(Integer, ForeignKey("host.id", ondelete='cascade'), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
@@ -183,6 +190,12 @@ class Service(DeclarativeBase):
                          cascade="all",
                          order_by="asc(Path._full_path)")
     __table_args__ = (UniqueConstraint("port", "host_id", name="_service_host_unique"),)
+
+    def __repr__(self):
+        result = ""
+        if self.host:
+            result = "{}://{}:{}".format(self.name.name, self.host.address, self.port)
+        return result
 
 
 class Path(DeclarativeBase):
@@ -216,6 +229,16 @@ class Path(DeclarativeBase):
         self.extension = os.path.splitext(value)[1]
         self._full_path = value.replace("\\", "/")
         self.file_name = os.path.basename(self._full_path)
+
+    def __repr__(self):
+        result = ""
+        if self.service and self.service.host:
+            result = str(self.service)
+            if self.service.name == HunterType.smb and self.share:
+                result += "({})".format(self.share)
+            if self.full_path:
+                result += self.full_path if self.full_path[0] == "/" else ("/" + self.full_path)
+        return result
 
 
 class File(DeclarativeBase):

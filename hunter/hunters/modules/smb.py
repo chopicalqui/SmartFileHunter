@@ -30,6 +30,7 @@ import tempfile
 import datetime
 from database.model import Path
 from database.model import File
+from database.model import HunterType
 from impacket.smbconnection import SMB_DIALECT
 from impacket.smbconnection import SMB2_DIALECT_002
 from impacket.smbconnection import SMB2_DIALECT_21
@@ -47,7 +48,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, address=args.host, port=args.port, service_name="smb", **kwargs)
+        super().__init__(args, address=args.host, port=args.port, service_name=HunterType.smb.name, **kwargs)
         self.username = args.username
         if args.password:
             self.password = args.password

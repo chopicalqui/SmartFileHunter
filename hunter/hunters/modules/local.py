@@ -30,6 +30,7 @@ from datetime import datetime
 from datetime import timezone
 from database.model import Path
 from database.model import File
+from database.model import HunterType
 from hunters.core import BaseSensitiveFileHunter
 
 logger = logging.getLogger('nfs')
@@ -41,7 +42,7 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, address="127.0.0.1", service_name="local", **kwargs)
+        super().__init__(args, address="127.0.0.1", service_name=HunterType.local.name, **kwargs)
         self.path = args.path
 
     def enumerate(self) -> None:

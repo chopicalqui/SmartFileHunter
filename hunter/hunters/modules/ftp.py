@@ -30,6 +30,7 @@ import tempfile
 from datetime import datetime
 from database.model import Path
 from database.model import File
+from database.model import HunterType
 from hunters.core import BaseSensitiveFileHunter
 
 logger = logging.getLogger('ftp')
@@ -41,7 +42,7 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, address=args.host, port=21, service_name="ftp", **kwargs)
+        super().__init__(args, address=args.host, port=21, service_name=HunterType.ftp.name, **kwargs)
         self.username = args.username
         self.password = args.password
         self.tls = args.tls

@@ -32,6 +32,7 @@ from database.core import Engine
 from database.core import ManageDatabase
 from database.core import DeclarativeBase
 from database.model import WorkspaceNotFound
+from database.model import HunterType
 from hunters.analyzer.core import FileAnalzer
 from hunters.modules.smb import SmbSensitiveFileHunter
 from hunters.modules.ftp import FtpSensitiveFileHunter
@@ -49,10 +50,10 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--debug", action='store_true', help="print debug messages to standard output")
     sub_parser = parser.add_subparsers(help='list of available file hunter modules', dest="module")
     parser_database = sub_parser.add_parser('db', help='allows setting up and managing the database')
-    parser_smb = sub_parser.add_parser('smb', help='enumerate SMB services')
-    parser_ftp = sub_parser.add_parser('ftp', help='enumerate FTP services')
-    parser_nfs = sub_parser.add_parser('nfs', help='enumerate NFS services')
-    parser_local = sub_parser.add_parser('local', help='enumerate local file system')
+    parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')
+    parser_ftp = sub_parser.add_parser(HunterType.ftp.name, help='enumerate FTP services')
+    parser_nfs = sub_parser.add_parser(HunterType.nfs.name, help='enumerate NFS services')
+    parser_local = sub_parser.add_parser(HunterType.local.name, help='enumerate local file system')
     # setup database parser
     parser_database.add_argument('-a', '--add',
                                  type=str,
@@ -147,13 +148,13 @@ if __name__ == "__main__":
                 engine.print_workspaces()
             elif args.module == "db":
                 ManageDatabase(args).run()
-            elif args.module == "smb":
+            elif args.module == HunterType.smb.name:
                 enumeration_class = SmbSensitiveFileHunter
-            elif args.module == "ftp":
+            elif args.module == HunterType.ftp.name:
                 enumeration_class = FtpSensitiveFileHunter
-            elif args.module == "nfs":
+            elif args.module == HunterType.nfs.name:
                 enumeration_class = NfsSensitiveFileHunter
-            elif args.module == "local":
+            elif args.module == HunterType.local.name:
                 enumeration_class = LocalSensitiveFileHunter
             if enumeration_class:
                 engine = Engine()
