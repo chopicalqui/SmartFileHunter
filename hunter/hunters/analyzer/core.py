@@ -110,7 +110,7 @@ class FileAnalzer(Thread):
         for rule in self.config.matching_rules[SearchLocation.file_content.name]:
             if rule.is_match(path):
                 result = rule.relevance
-                self.add_content(rule, path)
+                self.add_content(path=path, rule=rule)
                 break
         return result
 

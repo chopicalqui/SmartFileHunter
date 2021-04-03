@@ -20,11 +20,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
-import sys
+import grp
+import pwd
 import time
 import passgen
 import argparse
-import sqlalchemy
+import tempfile
 import subprocess
 from threading import Thread
 from sqlalchemy import create_engine
@@ -135,32 +136,17 @@ class Engine:
         This method drops the databases
         """
         """This method drops all views and tables in the database."""
-        for database in [self._config.production_database, self._config.test_database]:
-            # drop database
-            result = subprocess.Popen(['sudo', '-u', 'postgres', 'dropdb', database],
-                                      stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL).wait()
-            if result != 0:
-                raise subprocess.CalledProcessError("dropping database '{}' failed with return code {}".format(database,
-                                                                                                               result))
-            # create database
-            result = subprocess.Popen(['sudo', '-u', 'postgres', 'createdb', database],
-                                      stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL).wait()
-            if result != 0:
-                raise subprocess.CalledProcessError("creating database '{}' failed with return code {}".format(database,
-                                                                                                               result))
-            # assign privileges to database
-            result = subprocess.Popen(['sudo', '-u', 'postgres', 'psql',
-                                       '-c', 'grant all privileges on database {} to {}'.format(database,
-                                                                                                self._config.username)],
-                                      stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL).wait()
-            if result != 0:
-                raise subprocess.CalledProcessError("assigning privileges on database '{}' for '{}' "
-                                                    "failed with return code {}".format(database,
-                                                                                        self._config.username,
-                                                                                        result))
+        with tempfile.TemporaryDirectory() as temp:
+            uid = pwd.getpwnam("postgres").pw_uid
+            gid = grp.getgrnam("postgres").gr_gid
+            os.chown(temp, uid, gid)
+            for database in [self._config.production_database, self._config.test_database]:
+                # drop database
+                subprocess.check_output("sudo -u postgres dropdb {}".format(database), shell=True, cwd=temp)
+                # create database
+                subprocess.check_output("sudo -u postgres createdb {}".format(database), shell=True, cwd=temp)
+                # assign privileges to database
+                subprocess.check_output("sudo -u postgres psql -c 'grant all privileges on database {} to {}'".format(database, self._config.username), shell=True, cwd=temp)
 
     @staticmethod
     def get_or_create(session, model, one_or_none=True, **kwargs):
