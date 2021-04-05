@@ -174,10 +174,15 @@ class Engine:
             session.flush()
         return instance
 
-    def get_workspace(self, session, name: str) -> Workspace:
+    def get_workspace(self, session, name: str, ignore: bool = False) -> Workspace:
         workspace = session.query(Workspace).filter(Workspace.name == name).one_or_none()
         if not workspace:
-            raise WorkspaceNotFound("workspace '{}' not found.".format(name))
+            if not ignore:
+                raise WorkspaceNotFound("workspace '{}' not found.".format(name))
+            else:
+                workspace = Workspace(name=name)
+                session.add(workspace)
+                session.flush()
         return workspace
 
     @staticmethod

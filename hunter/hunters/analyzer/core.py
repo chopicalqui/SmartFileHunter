@@ -53,6 +53,7 @@ class FileAnalzer(Thread):
                  config: FileHunterConfig,
                  **kwargs):
         super().__init__(daemon=True)
+        self._args = args
         self.workspace = args.workspace
         self.engine = engine
         self.config = config
@@ -112,6 +113,7 @@ class FileAnalzer(Thread):
         result = None
         for rule in self.config.matching_rules[SearchLocation.file_content.name]:
             if rule.is_match(path):
+                logger.info("Match: {} ({})".format(path.full_path, rule.get_text(not self._args.nocolor)))
                 result = rule.relevance
                 self.add_content(path=path, rule=rule)
                 break
@@ -126,6 +128,7 @@ class FileAnalzer(Thread):
         result = None
         for rule in self.config.matching_rules[SearchLocation.file_name.name]:
             if rule.is_match(path):
+                logger.info("Match: {} ({})".format(path.full_path, rule.get_text(not self._args.nocolor)))
                 result = rule.relevance
                 self.add_content(rule=rule, path=path)
                 break

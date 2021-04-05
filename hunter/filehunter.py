@@ -31,6 +31,7 @@ from queue import Queue
 from database.core import Engine
 from database.core import ManageDatabase
 from database.core import DeclarativeBase
+from database.review import ReviewConsole
 from database.model import WorkspaceNotFound
 from database.model import HunterType
 from hunters.analyzer.core import FileAnalzer
@@ -47,9 +48,13 @@ if __name__ == "__main__":
     default_thread_count = 10
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-l", "--list", action='store_true', help="list existing workspaces")
+    parser.add_argument("-i", "--ignore", action='store_true', help="if workspace does not exist, then automatically"
+                                                                    "add it")
+    parser.add_argument("--nocolor", action='store_true', help="disable color coding")
     parser.add_argument("-d", "--debug", action='store_true', help="print debug messages to standard output")
     sub_parser = parser.add_subparsers(help='list of available file hunter modules', dest="module")
     parser_database = sub_parser.add_parser('db', help='allows setting up and managing the database')
+    parser_review = sub_parser.add_parser('review', help='start file hunter console')
     parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')
     parser_ftp = sub_parser.add_parser(HunterType.ftp.name, help='enumerate FTP services')
     parser_nfs = sub_parser.add_parser(HunterType.nfs.name, help='enumerate NFS services')
@@ -72,6 +77,8 @@ if __name__ == "__main__":
     parser_database.add_argument("--setup-dbg",
                                  action="store_true",
                                  help="like --setup but just prints commands for initial setup for filehunter")
+    # setup console parser
+    parser_review.add_argument('-w', '--workspace', type=str, help='the workspace used for the enumeration')
     # setup SMB parser
     parser_smb.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_smb.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
@@ -148,6 +155,12 @@ if __name__ == "__main__":
                 engine.print_workspaces()
             elif args.module == "db":
                 ManageDatabase(args).run()
+            elif args.module == "review":
+                if args.workspace:
+                    engine = Engine()
+                    with engine.session_scope() as session:
+                        engine.get_workspace(session=session, name=args.workspace, ignore=args.ignore)
+                ReviewConsole(args=args).cmdloop()
             elif args.module == HunterType.smb.name:
                 enumeration_class = SmbSensitiveFileHunter
             elif args.module == HunterType.ftp.name:
@@ -163,7 +176,7 @@ if __name__ == "__main__":
                 DeclarativeBase.metadata.bind = engine.engine
                 # Check wheather name space exists
                 with engine.session_scope() as session:
-                    workspace = engine.get_workspace(session=session, name=args.workspace)
+                    workspace = engine.get_workspace(session=session, name=args.workspace, ignore=args.ignore)
                 # Create analysis/consumer threads
                 for i in range(args.threads):
                     FileAnalzer(args=args, engine=engine, file_queue=file_queue, config=config).start()

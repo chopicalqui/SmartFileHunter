@@ -46,6 +46,8 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import BYTEA
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+from termcolor import colored
+from typing import List
 
 DeclarativeBase = declarative_base()
 
@@ -194,7 +196,9 @@ class Service(DeclarativeBase):
     def __repr__(self):
         result = ""
         if self.host:
-            result = "{}://{}:{}".format(self.name.name, self.host.address, self.port)
+            result = "{}://{}".format(self.name.name, self.host.address)
+            if self.port:
+                result += ":{}".format(self.port)
         return result
 
 
@@ -272,6 +276,19 @@ class File(DeclarativeBase):
         self.file_type = magic.from_buffer(value)
         self.mime_type = magic.from_buffer(value, mime=True)
 
+    @property
+    def review_result_str(self) -> str:
+        return self.review_result.name if self.review_result else ReviewResult.tbd.name
+
+    @property
+    def review_result_with_color_str(self) -> str:
+        result = self.review_result_str
+        colors = {"": None,
+                  ReviewResult.tbd.name: "blue",
+                  ReviewResult.irrelevant.name: "grey",
+                  ReviewResult.relevant.name: "red"}
+        return colored(result, colors[result], attrs=["bold"])
+
     def add_match_rule(self, match_rule):
         """
         This method shall be used to add a match rule to tis file
@@ -290,10 +307,36 @@ class File(DeclarativeBase):
         """
         return hashlib.sha256(content).hexdigest()
 
-    def __repr__(self) -> str:
-        return "<File sha256_value='{}' file_type='{}' mime_type='{}' />".format(self.sha256_value,
-                                                                                 self.file_type,
-                                                                                 self.mime_type)
+    def get_text(self, color: bool = False, match_rules = []) -> List[str]:
+        """
+        This method returns the details about the review.
+        """
+        result = []
+        print_bold = lambda x: colored(x, attrs=['bold']) if color else x
+        review_result = self.review_result_with_color_str if color else self.review_result_str
+        result.append("{}         {}".format(print_bold("Paths"),
+                                              "; ".join([str(item) for item in self.paths])))
+        result.append("{}     {}".format(print_bold("MIME type"), self.mime_type))
+        result.append(print_bold("Match rules"))
+        for item in self.matches:
+            result.append("- {}".format(item.get_text(color)))
+        result.append("{} {}".format(print_bold("Review result"), review_result))
+        if "ASCII text" in self.file_type:
+            content = self.content.decode("utf-8")
+            hits_total = 0
+            for item in match_rules:
+                content, hits = item.highlight_text(content)
+                hits_total += hits
+            if color:
+                result.append("{}          {}".format(print_bold("Hits"), colored(hits_total, "red", attrs=["bold"])))
+            else:
+                result.append("{}          {}".format(print_bold("Hits"), hits_total))
+            result.append("")
+            result.append(content)
+        else:
+            result.append("")
+            result.append("(Is not a text file)")
+        return result
 
 
 class MatchRule(DeclarativeBase):
@@ -307,7 +350,7 @@ class MatchRule(DeclarativeBase):
     relevance = Column(Enum(FileRelevance), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
-    search_pattern_re = None
+    _search_pattern_re = None
     priority = None
     action = None
     __table_args__ = (UniqueConstraint('search_location', 'search_pattern', name='_match_rule_unique'),)
@@ -319,7 +362,26 @@ class MatchRule(DeclarativeBase):
     @search_pattern.setter
     def search_pattern(self, value: str) -> None:
         self._search_pattern = value
-        self.search_pattern_re = re.compile(value, re.IGNORECASE)
+        self._search_pattern_re = re.compile(value, re.IGNORECASE)
+
+    @property
+    def search_pattern_re(self):
+        if self._search_pattern_re is None:
+            self._search_pattern_re = re.compile(self._search_pattern, re.IGNORECASE)
+        return self._search_pattern_re
+
+    @property
+    def relevance_str(self):
+        return self.relevance.name if self.relevance else ""
+
+    @property
+    def relevance_with_color_str(self):
+        result = self.relevance_str
+        colors = {"": None,
+                  FileRelevance.high.name: "red",
+                  FileRelevance.medium.name: "yellow",
+                  FileRelevance.low.name: "blue"}
+        return colored(result, colors[result], attrs=["bold"])
 
     def __eq__(self, value):
         return self.search_location == value.search_location and self.search_pattern == value.search_pattern
@@ -360,3 +422,42 @@ class MatchRule(DeclarativeBase):
                          action=action,
                          priority=priority)
         return rule
+
+    def highlight_text(self, text: str, color: bool = False) -> tuple:
+        """
+        Highlights the matched text in the given text
+        """
+        hits = 0
+        if self.search_pattern_re is not None and text:
+            offset = 0
+            for item in self.search_pattern_re.finditer(text):
+                for i, j in item.regs:
+                    hits += 1
+                    if color:
+                        text = text[:i] + colored(text[i:j], color="red", attrs=["bold"]) + text[j:]
+                    offset += 1
+        return (text, hits)
+
+    def get_text(self, color: bool = False) -> str:
+        """
+        Returns the current object state as string
+        """
+        relevance = self.relevance_with_color_str if color else self.relevance_str
+        print_bold = lambda x: colored(x, attrs=['bold']) if color else x
+        if self.category:
+            result = "{}: {}; {}: {}; {}: {}; {}: {}".format(print_bold("search location"),
+                                                             self.search_location.name,
+                                                             print_bold("pattern"),
+                                                             self._search_pattern,
+                                                             print_bold("category"),
+                                                             self.category,
+                                                             print_bold("relevance"),
+                                                             relevance)
+        else:
+            result = "{}: {}; {}: {}; {}: {}".format(print_bold("search location"),
+                                                     self.search_location.name,
+                                                     print_bold("pattern"),
+                                                     self._search_pattern,
+                                                     print_bold("relevance"),
+                                                     relevance)
+        return result

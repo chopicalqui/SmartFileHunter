@@ -145,6 +145,11 @@ class TestService(BaseDataModelTestCase):
         service = Service(name=HunterType.smb, port=445, host=host)
         self.assertEqual("smb://127.0.0.1:445", str(service))
 
+    def test_repr_with_host_without_port(self):
+        host = Host(address="127.0.0.1")
+        service = Service(name=HunterType.local, host=host)
+        self.assertEqual("local://127.0.0.1", str(service))
+
 
 class TestFile(BaseDataModelTestCase):
     """
@@ -289,7 +294,6 @@ class TestPath(BaseDataModelTestCase):
         self.assertEqual("ftp://127.0.0.1:21", str(path))
 
 
-
 class TestMatchRule(BaseDataModelTestCase):
     """
     Test data model for workspace
@@ -332,3 +336,21 @@ class TestMatchRule(BaseDataModelTestCase):
                                category="test",
                                relevance=FileRelevance.high,
                                search_pattern=".*")
+
+    def test_highlight_text(self):
+        text = """# Oracle DB properties
+#jdbc.driver=oracle.jdbc.driver.OracleDriver
+#jdbc.url=jdbc:oracle:thin:@localhost:1571:MyDbSID
+#jdbc.username=root
+#jdbc.password=admin
+
+# MySQL DB properties
+jdbc.driver=com.mysql.jdbc.Driver
+jdbc.url=jdbc:mysql://localhost:3306/MyDbName
+jdbc.username=root
+jdbc.password=admin"""
+        rule = MatchRule(search_location=SearchLocation.file_content,
+                         search_pattern="jdbc\.password\s*[=:]?",
+                         relevance=FileRelevance.high)
+        text, hits = rule.highlight_text(text)
+        self.assertEqual(2, hits)
