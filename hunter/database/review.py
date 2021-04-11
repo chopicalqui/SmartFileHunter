@@ -30,7 +30,8 @@ from database.model import File
 from database.model import MatchRule
 from database.model import SearchLocation
 from database.model import Workspace
-from sqlalchemy import distinct
+from database.model import ReviewResult
+from sqlalchemy import desc
 
 
 class ConsoleOptions(enum.Enum):
@@ -52,6 +53,8 @@ class ReviewConsole(Cmd):
             self._options[ConsoleOptions.workspace] = args.workspace
         self._update_file_list()
         self._update_prompt_text()
+        if args.workspace:
+            self.do_n(None)
 
     def _update_prompt_text(self):
         """
@@ -73,7 +76,9 @@ class ReviewConsole(Cmd):
             self._file_ids = [item[0] for item in session.query(File.id)
                 .join(Workspace)
                 .join((MatchRule, File.matches))
-                .filter(Workspace.name == self._options[ConsoleOptions.workspace])]
+                .filter(Workspace.name == self._options[ConsoleOptions.workspace], File.review_result.is_(None))
+                #.filter(Workspace.name == self._options[ConsoleOptions.workspace], File.review_result == ReviewResult.relevant)
+                .order_by(desc(MatchRule.relevance))]
 
     def _update_view(self):
         """
@@ -97,11 +102,14 @@ class ReviewConsole(Cmd):
         """
         Display the next file
         """
-        if (self._cursor_id + 1) <= len(self._file_ids):
-            self._cursor_id += 1
-            self._update_view()
+        if self._options[ConsoleOptions.workspace]:
+            if (self._cursor_id + 1) <= len(self._file_ids):
+                self._cursor_id += 1
+                self._update_view()
+            else:
+                print("no more items available")
         else:
-            print("no more items available")
+            print("select a workspace first")
 
     def help_n(self):
         print('obtain the next file for review from the database')
@@ -116,6 +124,65 @@ class ReviewConsole(Cmd):
 
     def help_p(self):
         print('obtain previous file for review from the database')
+
+    def do_1(self, input: str):
+        """
+        Set file relevant
+        """
+        id = self._file_ids[self._cursor_id - 1]
+        with self._engine.session_scope() as session:
+            file = session.query(File).filter_by(id=id).one_or_none()
+            file.review_result = ReviewResult.relevant
+        self.do_n(input)
+
+    def help_1(self):
+        print('mark current file as relevant and move to next file')
+
+    def do_2(self, input: str):
+        """
+        Set file relevant
+        """
+        id = self._file_ids[self._cursor_id - 1]
+        with self._engine.session_scope() as session:
+            file = session.query(File).filter_by(id=id).one_or_none()
+            file.review_result = ReviewResult.irrelevant
+        self.do_n(input)
+
+    def help_2(self):
+        print('mark current file as irrelevant and move to next file')
+
+    def do_export(self, input: str):
+        """
+        Set file relevant
+        """
+        if input:
+            id = self._file_ids[self._cursor_id - 1]
+            with self._engine.session_scope() as session:
+                file_object = session.query(File).filter_by(id=id).one_or_none()
+                if file_object:
+                    with open(input, "wb") as file:
+                        file.write(file_object.content)
+                else:
+                    print("file not found")
+
+    def help_export(self):
+        print('export the current file to the given file (e.g., export /tmp/file.txt)')
+
+    def do_comment(self, input: str):
+        """
+        Set file relevant
+        """
+        if input:
+            id = self._file_ids[self._cursor_id - 1]
+            with self._engine.session_scope() as session:
+                file_object = session.query(File).filter_by(id=id).one_or_none()
+                if file_object:
+                    file_object.comment = input
+                else:
+                    print("file not found")
+
+    def help_comment(self):
+        print('add a review comment to the current file')
 
     def do_stats(self, input: str):
         """

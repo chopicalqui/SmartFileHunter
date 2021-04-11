@@ -35,7 +35,6 @@ from config.config import Database as DatabaseConfig
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
-from typing import List
 from contextlib import contextmanager
 
 DeclarativeBase = declarative_base()
@@ -246,7 +245,8 @@ class Engine:
     def add_service(session: Session,
                     port: int,
                     host: Host,
-                    name: HunterType = None) -> Service:
+                    name: HunterType = None,
+                    complete: bool = False) -> Service:
         """
          This method should be used to add a service to the database
          :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
@@ -254,11 +254,12 @@ class Engine:
          :param port: The port number that shall be added
          :param protocol_type: The protocol type that shall be added
          :param name: Specifies the service's name
+         :param complete: Specifies if the enumeration is completed (True) or not (False)
          :return: Database object
          """
         result = Engine.get_service(session=session, port=port, host=host)
         if not result:
-            result = Service(port=port, name=name, host=host)
+            result = Service(port=port, name=name, host=host, complete=complete)
             session.add(result)
             session.flush()
         return result

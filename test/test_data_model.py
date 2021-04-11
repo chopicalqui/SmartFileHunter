@@ -273,7 +273,7 @@ class TestPath(BaseDataModelTestCase):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.smb, port=445, host=host)
         path = Path(full_path="/IT/creds.txt", share="$D", service=service)
-        self.assertEqual("smb://127.0.0.1:445($D)/IT/creds.txt", str(path))
+        self.assertEqual("smb://127.0.0.1:445/$D/IT/creds.txt", str(path))
 
     def test_repr_with_host_and_ftp_service_01(self):
         host = Host(address="127.0.0.1")
@@ -338,7 +338,7 @@ class TestMatchRule(BaseDataModelTestCase):
                                search_pattern=".*")
 
     def test_highlight_text(self):
-        text = """# Oracle DB properties
+        text = b"""# Oracle DB properties
 #jdbc.driver=oracle.jdbc.driver.OracleDriver
 #jdbc.url=jdbc:oracle:thin:@localhost:1571:MyDbSID
 #jdbc.username=root

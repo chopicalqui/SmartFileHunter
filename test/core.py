@@ -33,7 +33,7 @@ class BaseTestCase(unittest.TestCase):
     """
     def __init__(self, test_name: str):
         super().__init__(test_name)
-        self._engine = Engine()
+        self._engine = Engine(production=False)
         self._workspaces = ["test1", "test2"]
 
     def init_db(self):

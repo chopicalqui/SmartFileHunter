@@ -45,7 +45,7 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
         super().__init__(args, address="127.0.0.1", service_name=HunterType.local.name, **kwargs)
         self.path = args.path
 
-    def enumerate(self) -> None:
+    def _enumerate(self) -> None:
         """
         This method enumerates all files on the given service.
         :return:

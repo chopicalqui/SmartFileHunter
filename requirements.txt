@@ -2,3 +2,5 @@ impacket
 ftplib
 libnfs
 python-magic
+openpyxl
+hexdump

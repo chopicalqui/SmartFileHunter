@@ -97,7 +97,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             result.append((shares[i]['shi1_netname'][:-1], shares[i]['shi1_remark'][:-1]))
         return result
 
-    def enumerate(self) -> None:
+    def _enumerate(self) -> None:
         """
         This method enumerates all files on the given service.
         :return:
@@ -105,14 +105,14 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         for name, _ in self.shares:
             try:
                 logger.debug("enumerate share: {}".format(name))
-                self._enumerate(name)
+                self.__enumerate(name)
             except SessionError as ex:
                 pass
             except Exception as ex:
                 if "STATUS_ACCESS_DENIED" not in str(ex):
                     logger.exception(ex)
 
-    def _enumerate(self, share: str, directory: str = "/") -> None:
+    def __enumerate(self, share: str, directory: str = "/") -> None:
         items = self.client.listPath(share, self.pathify(directory))
         for item in items:
             file_size = item.get_filesize()
@@ -121,7 +121,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             if filename not in ['.', '..']:
                 full_path = os.path.join(directory, filename)
                 if is_directory:
-                    self._enumerate(share, os.path.join(directory, filename))
+                    self.__enumerate(share, os.path.join(directory, filename))
                 elif self.is_file_size_below_threshold(file_size):
                     path = Path(service=self.service,
                                 full_path=full_path,

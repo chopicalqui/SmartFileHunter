@@ -56,7 +56,7 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
     def __del__(self):
         self.client.close()
 
-    def enumerate(self, cwd: str = None) -> None:
+    def _enumerate(self, cwd: str = None) -> None:
         """
         This method enumerates all files on the given service.
         :return:

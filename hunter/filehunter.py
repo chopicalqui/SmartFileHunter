@@ -32,8 +32,12 @@ from database.core import Engine
 from database.core import ManageDatabase
 from database.core import DeclarativeBase
 from database.review import ReviewConsole
+from database.report import ReportGenerator
 from database.model import WorkspaceNotFound
 from database.model import HunterType
+from database.model import Host
+from database.model import Service
+from database.model import Workspace
 from hunters.analyzer.core import FileAnalzer
 from hunters.modules.smb import SmbSensitiveFileHunter
 from hunters.modules.ftp import FtpSensitiveFileHunter
@@ -52,9 +56,11 @@ if __name__ == "__main__":
                                                                     "add it")
     parser.add_argument("--nocolor", action='store_true', help="disable color coding")
     parser.add_argument("-d", "--debug", action='store_true', help="print debug messages to standard output")
+    parser.add_argument("--log", metavar="FILE", type=str, help="log messages to the given file")
     sub_parser = parser.add_subparsers(help='list of available file hunter modules', dest="module")
     parser_database = sub_parser.add_parser('db', help='allows setting up and managing the database')
     parser_review = sub_parser.add_parser('review', help='start file hunter console')
+    parser_report = sub_parser.add_parser("report", help='obtain reports about the collected data')
     parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')
     parser_ftp = sub_parser.add_parser(HunterType.ftp.name, help='enumerate FTP services')
     parser_nfs = sub_parser.add_parser(HunterType.nfs.name, help='enumerate NFS services')
@@ -79,8 +85,17 @@ if __name__ == "__main__":
                                  help="like --setup but just prints commands for initial setup for filehunter")
     # setup console parser
     parser_review.add_argument('-w', '--workspace', type=str, help='the workspace used for the enumeration')
+    # setup report parser
+    parser_report.add_argument('-w', '--workspace',
+                               nargs="+",
+                               type=str,
+                               required=True,
+                               help='the workspace used for the enumeration')
+    parser_report.add_argument('-e', '--excel', type=str, help="write report to given excel file")
+    parser_report.add_argument('-c', '--csv', action="store_true", help="print report results to stdout as CSV")
     # setup SMB parser
     parser_smb.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
+    parser_smb.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
     parser_smb.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     parser_smb.add_argument('-t', '--threads', type=int, default=default_thread_count,
                             help='number of analysis threads')
@@ -103,6 +118,7 @@ if __name__ == "__main__":
                                              metavar="PASSWORD", help='password of given user')
     # setup FTP parser
     parser_ftp.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
+    parser_ftp.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
     parser_ftp.add_argument('--tls', action="store_true", help='use TLS')
     parser_ftp.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     parser_ftp.add_argument('-t', '--threads', type=int, default=default_thread_count,
@@ -116,6 +132,7 @@ if __name__ == "__main__":
                                           metavar="PASSWORD", help='password of given user')
     # setup NFS parser
     parser_nfs.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
+    parser_nfs.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
     parser_nfs.add_argument('--version', type=int, choices=[3, 4], default=3, help='NFS version to use')
     parser_nfs.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     parser_nfs.add_argument('-t', '--threads', type=int, default=default_thread_count,
@@ -136,7 +153,8 @@ if __name__ == "__main__":
     
     level = logging.DEBUG if args.debug else logging.INFO
     handlers = [logging.StreamHandler()]
-
+    if args.log:
+        handlers.append(logging.FileHandler(args.log))
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',
                         level=level,
@@ -161,6 +179,13 @@ if __name__ == "__main__":
                     with engine.session_scope() as session:
                         engine.get_workspace(session=session, name=args.workspace, ignore=args.ignore)
                 ReviewConsole(args=args).cmdloop()
+            elif args.module == "report":
+                if args.workspace:
+                    engine = Engine()
+                    with engine.session_scope() as session:
+                        for workspace in args.workspace:
+                            engine.get_workspace(session=session, name=workspace, ignore=args.ignore)
+                ReportGenerator(args=args).run()
             elif args.module == HunterType.smb.name:
                 enumeration_class = SmbSensitiveFileHunter
             elif args.module == HunterType.ftp.name:
@@ -182,7 +207,16 @@ if __name__ == "__main__":
                     FileAnalzer(args=args, engine=engine, file_queue=file_queue, config=config).start()
                 hunter = enumeration_class(args, engine=engine, file_queue=file_queue, config=config, temp_dir=temp_dir)
                 hunter.enumerate()
+                logger.info("Enumeration finished: {}".format(file_queue.qsize()))
                 file_queue.join()
+                with engine.session_scope() as session:
+                    service = session.query(Service) \
+                        .join(Host) \
+                        .join(Workspace) \
+                        .filter(Workspace.name == args.workspace,
+                                Host.address == hunter.address,
+                                Service.port == hunter.port).one()
+                    service.complete = True
     except WorkspaceNotFound as ex:
         print(str(ex), file=sys.stderr)
     except Exception as ex:

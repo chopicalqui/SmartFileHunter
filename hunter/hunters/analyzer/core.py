@@ -149,13 +149,15 @@ class FileAnalzer(Thread):
             if exists:
                 self.add_content(path=path, file=file)
         if not exists:
-            if "ASCII text" in path.file.file_type:
-                # First analyze the file's content
-                if not self._analyze_content(path):
-                    # If file content did not return any results, then verify the file name
-                    self._analyze_path_name(path)
-            elif "zip archive data" in path.file.file_type:
+            if "zip archive data" in path.file.file_type:
                 pass
             else:
-                # If non-searchable file, then just analyze the file name
-                self._analyze_path_name(path)
+                result = False
+                # 1. Try analyzing the content of every file (even binary files)
+                try:
+                    result = self._analyze_content(path)
+                except Exception as ex:
+                    logger.exception(ex)
+                # If content search did not return any results or failed, then just analyze the file name
+                if not result:
+                    self._analyze_path_name(path)

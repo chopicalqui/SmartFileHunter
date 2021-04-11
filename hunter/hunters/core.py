@@ -23,12 +23,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import argparse
+import logging
 from queue import Queue
 from database.core import Engine
 from database.model import Host
 from database.model import Service
 from database.model import Workspace
 from config.config import FileHunter as FileHunterConfig
+
+logger = logging.getLogger('smb')
 
 
 class BaseSensitiveFileHunter:
@@ -49,11 +52,13 @@ class BaseSensitiveFileHunter:
         self.service.host = Host(address=address)
         self.service.workspace = Workspace(name=args.workspace)
         self.verbose = args.verbose
+        self.reanalyze = args.reanalyze
         self.config = config
         self.port = port
         self.address = address
         self.temp_dir = temp_dir
         self.file_queue = file_queue
+        self._engine = engine
         self.file_size_threshold = self.config.config["general"].getint("max_file_size_kb")
         # we add the current host and service to the database so that the consumer threads can use them
         with engine.session_scope() as session:
@@ -81,4 +86,23 @@ class BaseSensitiveFileHunter:
         This method enumerates all files on the given service.
         :return:
         """
-        raise NotImplementedError("this method must be implemented by all subclasses.")
+        # Determine if service was analyzed before
+        with self._engine.session_scope() as session:
+            service = session.query(Service) \
+                .join(Host) \
+                .join(Workspace) \
+                .filter(Workspace.name == self.service.workspace.name,
+                        Host.address == self.address,
+                        Service.port == self.port).one()
+            complete = service.complete
+        if not complete or self.reanalyze:
+            self._enumerate()
+        else:
+            logger.info("skipping service as it was already analyzed")
+
+    def _enumerate(self):
+        """
+        This method enumerates all files on the given service.
+        :return:
+        """
+        raise NotImplementedError("this method must be implemented by all subclasses")

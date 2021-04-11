@@ -28,9 +28,11 @@ import hashlib
 import magic
 import enum
 import logging
+import hexdump
 import sqlalchemy as sa
 from sqlalchemy import Column
 from sqlalchemy import Integer
+from sqlalchemy import Boolean
 from sqlalchemy import String
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
@@ -184,6 +186,7 @@ class Service(DeclarativeBase):
     id = Column(Integer, primary_key=True)
     port = Column(Integer, nullable=True, unique=False)
     name = Column(Enum(HunterType), nullable=False, unique=False)
+    complete = Column(Boolean, nullable=True, unique=False)
     host_id = Column(Integer, ForeignKey("host.id", ondelete='cascade'), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
@@ -239,7 +242,7 @@ class Path(DeclarativeBase):
         if self.service and self.service.host:
             result = str(self.service)
             if self.service.name == HunterType.smb and self.share:
-                result += "({})".format(self.share)
+                result += "/{}".format(self.share)
             if self.full_path:
                 result += self.full_path if self.full_path[0] == "/" else ("/" + self.full_path)
         return result
@@ -255,6 +258,7 @@ class File(DeclarativeBase):
     sha256_value = Column(Text, nullable=False, unique=False)
     file_type = Column(Text, nullable=True, unique=False)
     mime_type = Column(Text, nullable=True, unique=False)
+    comment = Column(Text, nullable=True, unique=False)
     review_result = Column(Enum(ReviewResult), nullable=True, unique=False)
     workspace_id = Column(Integer, ForeignKey("workspace.id", ondelete='cascade'), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
@@ -312,8 +316,24 @@ class File(DeclarativeBase):
         This method returns the details about the review.
         """
         result = []
+        hits_total = 0
         print_bold = lambda x: colored(x, attrs=['bold']) if color else x
         review_result = self.review_result_with_color_str if color else self.review_result_str
+        try:
+            content = self.content.decode("utf-8")
+            for item in match_rules:
+                content, hits = item.highlight_text(content)
+                hits_total += hits
+            result.append(content)
+        except:
+            try:
+                for line in hexdump.dumpgen(self.content):
+                    result.append(line)
+            except Exception as ex:
+                result.append(print_bold("exception while decoding file: {}".format(str(ex))))
+                result.append(print_bold("could not print file. try to export and analyze with another program"))
+        result.append("")
+        result.append("{}       {}".format(print_bold("File ID"), self.id))
         result.append("{}         {}".format(print_bold("Paths"),
                                               "; ".join([str(item) for item in self.paths])))
         result.append("{}     {}".format(print_bold("MIME type"), self.mime_type))
@@ -321,21 +341,12 @@ class File(DeclarativeBase):
         for item in self.matches:
             result.append("- {}".format(item.get_text(color)))
         result.append("{} {}".format(print_bold("Review result"), review_result))
-        if "ASCII text" in self.file_type:
-            content = self.content.decode("utf-8")
-            hits_total = 0
-            for item in match_rules:
-                content, hits = item.highlight_text(content)
-                hits_total += hits
-            if color:
-                result.append("{}          {}".format(print_bold("Hits"), colored(hits_total, "red", attrs=["bold"])))
-            else:
-                result.append("{}          {}".format(print_bold("Hits"), hits_total))
-            result.append("")
-            result.append(content)
+        if self.comment:
+            result.append("{}       {}".format(print_bold("Comment"), self.comment))
+        if color:
+            result.append("{}          {}".format(print_bold("Hits"), colored(hits_total, "red", attrs=["bold"])))
         else:
-            result.append("")
-            result.append("(Is not a text file)")
+            result.append("{}          {}".format(print_bold("Hits"), hits_total))
         return result
 
 
@@ -362,10 +373,16 @@ class MatchRule(DeclarativeBase):
     @search_pattern.setter
     def search_pattern(self, value: str) -> None:
         self._search_pattern = value
-        self._search_pattern_re = re.compile(value, re.IGNORECASE)
+        self._search_pattern_re = re.compile(value.encode("utf-8"), re.IGNORECASE)
 
     @property
     def search_pattern_re(self):
+        if self._search_pattern_re is None:
+            self._search_pattern_re = re.compile(self._search_pattern.encode("utf-8"), re.IGNORECASE)
+        return self._search_pattern_re
+
+    @property
+    def search_pattern_re_text(self):
         if self._search_pattern_re is None:
             self._search_pattern_re = re.compile(self._search_pattern, re.IGNORECASE)
         return self._search_pattern_re
@@ -393,11 +410,11 @@ class MatchRule(DeclarativeBase):
         :return:
         """
         if self.search_location == SearchLocation.file_content:
-            result = len(self.search_pattern_re.findall(path.file.content.decode('utf-8'))) > 0
+            result = len(self.search_pattern_re.findall(path.file.content)) > 0
         elif self.search_location == SearchLocation.file_name:
-            result = self.search_pattern_re.match(path.file_name) is not None
+            result = self.search_pattern_re.match(path.file_name.encode("utf-8")) is not None
         elif self.search_location == SearchLocation.directory_name:
-            result = self.search_pattern_re.match(path.full_path) is not None
+            result = self.search_pattern_re.match(path.full_pathencode("utf-8")) is not None
         else:
             raise NotImplementedError("this case is not implemented")
         return result
@@ -428,9 +445,9 @@ class MatchRule(DeclarativeBase):
         Highlights the matched text in the given text
         """
         hits = 0
-        if self.search_pattern_re is not None and text:
+        if self.search_pattern_re_text is not None and text:
             offset = 0
-            for item in self.search_pattern_re.finditer(text):
+            for item in self.search_pattern_re_text.finditer(text):
                 for i, j in item.regs:
                     hits += 1
                     if color:

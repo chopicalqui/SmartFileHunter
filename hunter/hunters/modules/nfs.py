@@ -52,7 +52,7 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                                                                             self.service.port)
         self.client = libnfs.NFS(self.connection_string)
 
-    def enumerate(self, cwd: str = "") -> None:
+    def _enumerate(self, cwd: str = "") -> None:
         """
         This method enumerates all files on the given service.
         :return:
