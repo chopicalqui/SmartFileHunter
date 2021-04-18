@@ -42,7 +42,7 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, address="127.0.0.1", service_name=HunterType.local.name, **kwargs)
+        super().__init__(args, address="127.0.0.1", service_name=HunterType.local, **kwargs)
         self.path = args.path
 
     def _enumerate(self) -> None:
@@ -65,3 +65,5 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
                     path.file = File(content=content)
                     logger.debug("enqueue file: {}".format(path.full_path))
                     self.file_queue.put(path)
+                elif os.path.isfile(item):
+                    logger.debug("skip file: {}".format(item))

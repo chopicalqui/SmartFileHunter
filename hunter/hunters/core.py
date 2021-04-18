@@ -60,7 +60,7 @@ class BaseSensitiveFileHunter:
         self.temp_dir = temp_dir
         self.file_queue = file_queue
         self._engine = engine
-        self.file_size_threshold = self.config.config["general"].getint("max_file_size_kb")
+        self.file_size_threshold = self.config.config["general"].getint("max_file_size_bytes")
         # we add the current host and service to the database so that the consumer threads can use them
         with engine.session_scope() as session:
             workspace = engine.get_workspace(session, name=args.workspace)

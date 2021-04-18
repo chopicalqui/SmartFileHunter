@@ -49,13 +49,20 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
 
     def __init__(self, args: argparse.Namespace, **kwargs):
         super().__init__(args, address=args.host, port=args.port, service_name=HunterType.smb, **kwargs)
-        self.username = args.username
+        if args.username:
+            self.username = args.username
+        else:
+            self.username = ''
         if args.password:
             self.password = args.password
             self.lm_hash = ''
             self.nt_hash = ''
+        elif args.hash:
+            self.lm_hash, self.nt_hash = args.hash.split(':')
         else:
-            self.lm_hash, self.nt_hash = args.hashes.split(':')
+            self.password = ''
+            self.lm_hash = ''
+            self.nt_hash = ''
         self.domain = args.domain
         self.client = SMBConnection(self.service.host.address, self.service.host.address, sess_port=self.service.port)
         self.client.login(self.username, self.password, self.domain, self.lm_hash, self.nt_hash)
@@ -94,7 +101,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         result = []
         shares = self.client.listShares()
         for i in range(len(shares)):
-            result.append((shares[i]['shi1_netname'][:-1], shares[i]['shi1_remark'][:-1]))
+            result.append(shares[i]['shi1_netname'][:-1])
         return result
 
     def _enumerate(self) -> None:
@@ -102,12 +109,12 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         This method enumerates all files on the given service.
         :return:
         """
-        for name, _ in self.shares:
+        for name in self.shares:
             try:
                 logger.debug("enumerate share: {}".format(name))
                 self.__enumerate(name)
             except SessionError as ex:
-                pass
+                logger.exception(ex)
             except Exception as ex:
                 if "STATUS_ACCESS_DENIED" not in str(ex):
                     logger.exception(ex)
@@ -139,3 +146,5 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                     # Add file to queue
                     logger.debug("enqueue file: {}".format(str(path)))
                     self.file_queue.put(path)
+                else:
+                    logger.debug("skip file: {}".format(full_path))

@@ -108,11 +108,11 @@ if __name__ == "__main__":
                                   help="list of shares to enumerate. if not specified, then all shares will be "
                                        "enumerated.")
     smb_authentication_group = parser_smb.add_argument_group('authentication')
-    smb_authentication_group.add_argument('-u', '--username', required=True, type=str,
+    smb_authentication_group.add_argument('-u', '--username', type=str,
                                           metavar="USERNAME", help='the name of the user to use for authentication')
     smb_authentication_group.add_argument('-d', '--domain', default=".", type=str,
                                           metavar="DOMAIN", help='the domain to use for authentication')
-    parser_smb_credential_group = smb_authentication_group.add_mutually_exclusive_group(required=True)
+    parser_smb_credential_group = smb_authentication_group.add_mutually_exclusive_group()
     parser_smb_credential_group.add_argument('--hash', action="store",
                                              metavar="LMHASH:NTHASH", help='NTLM hashes, format is LMHASH:NTHASH')
     parser_smb_credential_group.add_argument('-p', '--password', action="store",
@@ -149,6 +149,7 @@ if __name__ == "__main__":
     parser_local.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_local.add_argument('-w', '--workspace', type=str, required=True,
                               help='the workspace used for the enumeration')
+    parser_local.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
     parser_local.add_argument('-t', '--threads', type=int, default=default_thread_count,
                               help='number of analysis threads')
     parser_local.add_argument('path', nargs="+", help='directories to enumerate')
@@ -200,7 +201,7 @@ if __name__ == "__main__":
             if enumeration_class:
                 engine = Engine()
                 config = FileHunterConfig()
-                file_queue = Queue()
+                file_queue = Queue(maxsize=20)
                 DeclarativeBase.metadata.bind = engine.engine
                 # Check wheather name space exists
                 with engine.session_scope() as session:

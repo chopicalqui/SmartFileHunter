@@ -67,7 +67,7 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                     self._enumerate(full_path)
                 elif self.is_file_size_below_threshold(file_size):
                     path = Path(service=self.service,
-                                full_path=item,
+                                full_path=full_path,
                                 access_time=datetime.fromtimestamp(stats['atime']['sec'], tz=timezone.utc),
                                 modified_time=datetime.fromtimestamp(stats['mtime']['sec'], tz=timezone.utc),
                                 creation_time=datetime.fromtimestamp(stats['ctime']['sec'], tz=timezone.utc))
@@ -75,3 +75,5 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                     path.file = File(content=bytes(content))
                     logger.debug("enqueue file: {}".format(str(path)))
                     self.file_queue.put(path)
+                else:
+                    logger.debug("skip file: {}".format(full_path))

@@ -421,31 +421,30 @@ class ManageDatabase:
         self._db_config.password = passgen.passgen(30)
 
     def run(self):
+        if self._arguments.setup or self._arguments.setup_dbg:
+            self._setup(self._arguments.setup_dbg)
+        if self._arguments.backup:
+            engine = Engine()
+            DeclarativeBase.metadata.bind = engine.engine
+            engine.create_backup(self._arguments.backup)
+        if self._arguments.restore:
+            engine = Engine()
+            DeclarativeBase.metadata.bind = engine.engine
+            engine.restore_backup(self._arguments.restore)
+        if self._arguments.drop:
+            engine = Engine()
+            DeclarativeBase.metadata.bind = engine.engine
+            engine.recreate_database()
+        if self._arguments.init:
+            engine = Engine()
+            DeclarativeBase.metadata.bind = engine.engine
+            engine.init()
         if self._arguments.add:
             engine = Engine()
             DeclarativeBase.metadata.bind = engine.engine
             with engine.session_scope() as session:
                 workspace = Workspace(name=self._arguments.add)
                 session.add(workspace)
-        elif self._arguments.backup:
-            engine = Engine()
-            DeclarativeBase.metadata.bind = engine.engine
-            engine.create_backup(self._arguments.backup)
-        elif self._arguments.restore:
-            engine = Engine()
-            DeclarativeBase.metadata.bind = engine.engine
-            engine.restore_backup(self._arguments.restore)
-        elif self._arguments.setup or self._arguments.setup_dbg:
-            self._setup(self._arguments.setup_dbg)
-        else:
-            if self._arguments.drop:
-                engine = Engine()
-                DeclarativeBase.metadata.bind = engine.engine
-                engine.recreate_database()
-            if self._arguments.init:
-                engine = Engine()
-                DeclarativeBase.metadata.bind = engine.engine
-                engine.init()
 
     def _setup(self, debug: bool):
         setup_commands = []
