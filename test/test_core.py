@@ -22,3 +22,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
+import unittest
+from config.config import FileHunter as FileHunterConfig
+
+
+class TestFileHunterConfig(unittest.TestCase):
+    """
+    This method tests the correct load of file hunter configuratons
+    """
+
+    def __init__(self, test_name: str):
+        super().__init__(test_name)
+        self._config = FileHunterConfig()
+
+    def test_match_rules_correctly_sorted(self):
+        for rules in self._config.matching_rules.values():
+            priority = 10000
+            for rule in rules:
+                self.assertLessEqual(rule.priority, priority)
+                priority = rule.priority

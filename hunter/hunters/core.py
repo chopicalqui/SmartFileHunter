@@ -29,6 +29,7 @@ from database.core import Engine
 from database.model import Host
 from database.model import Service
 from database.model import Workspace
+from database.model import HunterType
 from config.config import FileHunter as FileHunterConfig
 
 logger = logging.getLogger('smb')
@@ -44,7 +45,7 @@ class BaseSensitiveFileHunter:
                  file_queue: Queue, temp_dir,
                  config: FileHunterConfig,
                  address: str,
-                 service_name: str,
+                 service_name: HunterType,
                  engine: Engine,
                  port: int = None,
                  **kwargs):
@@ -76,6 +77,7 @@ class BaseSensitiveFileHunter:
                                           search_location=match_rule.search_location,
                                           search_pattern=match_rule.search_pattern,
                                           relevance=match_rule.relevance,
+                                          accuracy=match_rule.accuracy,
                                           category=match_rule.category)
 
     def is_file_size_below_threshold(self, size: int) -> bool:

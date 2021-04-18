@@ -62,7 +62,8 @@ if __name__ == "__main__":
     parser_review = sub_parser.add_parser('review', help='start file hunter console')
     parser_report = sub_parser.add_parser("report", help='obtain reports about the collected data')
     parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')
-    parser_ftp = sub_parser.add_parser(HunterType.ftp.name, help='enumerate FTP services')
+    parser_ftp = sub_parser.add_parser(HunterType.ftp.name, help='enumerate FTP services. note that the FTP service '
+                                                                 'must support the MLSD command')
     parser_nfs = sub_parser.add_parser(HunterType.nfs.name, help='enumerate NFS services')
     parser_local = sub_parser.add_parser(HunterType.local.name, help='enumerate local file system')
     # setup database parser
@@ -125,6 +126,8 @@ if __name__ == "__main__":
                             help='number of analysis threads')
     ftp_target_group = parser_ftp.add_argument_group('target information')
     ftp_target_group.add_argument('--host', type=str, metavar="HOST", help="the target FTP service's IP address")
+    ftp_target_group.add_argument('--port', type=int, default=21, metavar="PORT",
+                                  help="the target FTP service's port")
     ftp_authentication_group = parser_ftp.add_argument_group('authentication')
     ftp_authentication_group.add_argument('-u', '--username', action="store", default='',
                                           metavar="USERNAME", help='the name of the user to use for authentication')

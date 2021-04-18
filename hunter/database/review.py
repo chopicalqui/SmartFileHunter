@@ -31,11 +31,29 @@ from database.model import MatchRule
 from database.model import SearchLocation
 from database.model import Workspace
 from database.model import ReviewResult
+from database.model import Path
+from sqlalchemy import text
+from sqlalchemy import asc
 from sqlalchemy import desc
 
 
-class ConsoleOptions(enum.Enum):
+class ConsoleOption(enum.Enum):
     workspace = enum.auto()
+    filter = enum.auto()
+
+    @staticmethod
+    def get_text(option):
+        if option == ConsoleOption.workspace:
+            result = """ review files in the given workspace"""
+        elif option == ConsoleOption.filter:
+            result = """ update where clause to limit review list. examples of valid filters are:
+ - All files that have not been reviewed  and do not have the extension log: (File.review_result IS NULL OR File.review_result = 'tbd') AND Path.extension NOT IN ('.log')
+ - All files that have not been reviewed:                                    File.review_result IS NULL OR File.review_result = 'tbd'
+ - Only relevant files:                                                      File.review_result IS NOT NULL AND File.review_result = 'relevant'
+ - Get all results:                                                          1=1"""
+        else:
+            raise NotImplementedError("case not implemented")
+        return result
 
 
 class ReviewConsole(Cmd):
@@ -45,12 +63,13 @@ class ReviewConsole(Cmd):
         super().__init__()
         self._args = args
         self._cursor_id = 0
-        self._options = {item: None for item in ConsoleOptions}
+        self._options = {item: None for item in ConsoleOption}
         self._environment = None
         self._engine = Engine()
         self._file_ids = []
         if args.workspace:
-            self._options[ConsoleOptions.workspace] = args.workspace
+            self._options[ConsoleOption.workspace] = args.workspace
+        self._options[ConsoleOption.filter] = "File.review_result IS NULL OR File.review_result = 'tbd'"
         self._update_file_list()
         self._update_prompt_text()
         if args.workspace:
@@ -61,8 +80,8 @@ class ReviewConsole(Cmd):
         This method returns the current command prompt.
         """
         result = "sfh"
-        if self._options[ConsoleOptions.workspace]:
-            result += " ({})".format(self._options[ConsoleOptions.workspace])
+        if self._options[ConsoleOption.workspace]:
+            result += " ({})".format(self._options[ConsoleOption.workspace])
         if self._cursor_id:
             result += " [{}/{}]".format(self._cursor_id, len(self._file_ids))
         result += "> "
@@ -76,9 +95,12 @@ class ReviewConsole(Cmd):
             self._file_ids = [item[0] for item in session.query(File.id)
                 .join(Workspace)
                 .join((MatchRule, File.matches))
-                .filter(Workspace.name == self._options[ConsoleOptions.workspace], File.review_result.is_(None))
-                #.filter(Workspace.name == self._options[ConsoleOptions.workspace], File.review_result == ReviewResult.relevant)
-                .order_by(desc(MatchRule.relevance))]
+                .join((Path, File.paths))
+                .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
+                                                                   self._options[ConsoleOption.filter])))
+                .distinct()
+                .order_by(desc(MatchRule.relevance), desc(MatchRule.accuracy), asc(Path.extension))]
+        self._cursor_id = 0
 
     def _update_view(self):
         """
@@ -102,7 +124,7 @@ class ReviewConsole(Cmd):
         """
         Display the next file
         """
-        if self._options[ConsoleOptions.workspace]:
+        if self._options[ConsoleOption.workspace]:
             if (self._cursor_id + 1) <= len(self._file_ids):
                 self._cursor_id += 1
                 self._update_view()
@@ -194,26 +216,51 @@ class ReviewConsole(Cmd):
         """
         Set environment variables
         """
-        arguments = input.split(" ")
-        if len(arguments) != 2:
-            print("invalid input; valid command is for example: set workspace test")
+        arguments = input.strip().split(" ")
+        # Show all options
+        if not input:
+            print(" Name            Value")
+            print(" ----            -----")
+            for item in ConsoleOption:
+                print(" {:<15} {}".format(item.name, self._options[item]))
             return
-        option, value = arguments
-        if option not in [item.name for item in ConsoleOptions]:
-            print("{} is an invalid option".format(option))
+        # Make sure that option exists
+        if arguments[0] in [item.name for item in ConsoleOption]:
+            option = ConsoleOption[arguments[0]]
+        else:
+            print("option '{}' des not exist".format(input))
             return
+        # Show value of given value
+        if len(arguments) == 1:
+            tmp = ConsoleOption[arguments[0]]
+            print(" {}: {}".format(arguments[0], self._options[tmp]))
+            print(" ")
+            print(ConsoleOption.get_text(tmp))
+            return
+        previous_value = self._options[option]
+        value = " ".join(arguments[1:])
         # input validation
-        option = ConsoleOptions[option]
-        if option == ConsoleOptions.workspace:
+        if option == ConsoleOption.workspace:
             with self._engine.session_scope() as session:
                 if session.query(Workspace).filter_by(name=value).count() == 0:
                     print("workspace '{}' does not exist.".format(value))
                     return
         self._options[option] = value
+        if option == ConsoleOption.filter:
+            self._options[option] = value
+            try:
+                self._update_file_list()
+            except Exception as ex:
+                print(ex)
+                self._options[option] = previous_value
+                return
         self._update_prompt_text()
 
     def help_set(self):
-        print('set one of the following options: {}'.format(", ".join([item.name for item in self._options.keys()])))
+        print("""Usage: set [option] [value]
+
+set the given option to value.  If value is omitted, print the current value.
+If both are omitted, print options that are currently set.""")
 
     def help_back(self):
         print('leave the current environment')

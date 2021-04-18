@@ -85,6 +85,12 @@ class FileRelevance(enum.Enum):
     high = 70
 
 
+class MatchRuleAccuracy(enum.Enum):
+    low = 100
+    medium = 80
+    high = 70
+
+
 class SearchLocation(enum.Enum):
     file_name = 20
     directory_name = 10
@@ -234,6 +240,8 @@ class Path(DeclarativeBase):
     @full_path.setter
     def full_path(self, value: str) -> None:
         self.extension = os.path.splitext(value)[1]
+        if self.extension:
+            self.extension = self.extension.lstrip(".")
         self._full_path = value.replace("\\", "/")
         self.file_name = os.path.basename(self._full_path)
 
@@ -359,12 +367,20 @@ class MatchRule(DeclarativeBase):
     _search_pattern = Column("search_pattern", Text, nullable=False, unique=False)
     category = Column(Text, nullable=True, unique=False)
     relevance = Column(Enum(FileRelevance), nullable=False, unique=False)
+    accuracy = Column(Enum(MatchRuleAccuracy), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
     _search_pattern_re = None
-    priority = None
     action = None
     __table_args__ = (UniqueConstraint('search_location', 'search_pattern', name='_match_rule_unique'),)
+
+    @property
+    def priority(self):
+        """Returns the priority of the given rule"""
+        result = 0
+        if self.search_location and self.relevance and self.accuracy and self.search_pattern:
+            result = self.search_location.value + self.relevance.value + self.accuracy.value + len(self.search_pattern)
+        return result
 
     @property
     def search_pattern(self) -> str:
@@ -400,6 +416,19 @@ class MatchRule(DeclarativeBase):
                   FileRelevance.low.name: "blue"}
         return colored(result, colors[result], attrs=["bold"])
 
+    @property
+    def accuracy_str(self):
+        return self.accuracy.name if self.accuracy else ""
+
+    @property
+    def accuracy_with_color_str(self):
+        result = self.accuracy_str
+        colors = {"": None,
+                  MatchRuleAccuracy.high.name: "red",
+                  MatchRuleAccuracy.medium.name: "yellow",
+                  MatchRuleAccuracy.low.name: "blue"}
+        return colored(result, colors[result], attrs=["bold"])
+
     def __eq__(self, value):
         return self.search_location == value.search_location and self.search_pattern == value.search_pattern
 
@@ -429,16 +458,25 @@ class MatchRule(DeclarativeBase):
         search_location = SearchLocation[json_object["search_location"]]
         category = json_object["category"]
         relevance = FileRelevance[json_object["relevance"]]
+        accuracy = MatchRuleAccuracy[json_object["accuracy"]]
         search_pattern = json_object["search_pattern"]
         action = ImportAction[json_object["action"]]
-        priority = search_location.value + relevance.value
         rule = MatchRule(search_location=search_location,
                          category=category,
                          relevance=relevance,
                          search_pattern=search_pattern,
                          action=action,
-                         priority=priority)
+                         accuracy=accuracy)
         return rule
+
+    def __repr__(self):
+        return "priority: {}, category: {}, search_location: {}, relevance: {}, " \
+               "accuracy: {}, search_pattern: {}".format(self.priority,
+                                                         self.category,
+                                                         self.search_location.name,
+                                                         self.relevance_str,
+                                                         self.accuracy.name,
+                                                         self.search_pattern)
 
     def highlight_text(self, text: str, color: bool = False) -> tuple:
         """
@@ -460,21 +498,26 @@ class MatchRule(DeclarativeBase):
         Returns the current object state as string
         """
         relevance = self.relevance_with_color_str if color else self.relevance_str
+        accuracy = self.accuracy_with_color_str if color else self.accuracy_str
         print_bold = lambda x: colored(x, attrs=['bold']) if color else x
         if self.category:
-            result = "{}: {}; {}: {}; {}: {}; {}: {}".format(print_bold("search location"),
+            result = "{}: {}; {}: {}; {}: {}; {}: {}, {}: {}".format(print_bold("search location"),
                                                              self.search_location.name,
                                                              print_bold("pattern"),
                                                              self._search_pattern,
                                                              print_bold("category"),
                                                              self.category,
                                                              print_bold("relevance"),
-                                                             relevance)
+                                                             relevance,
+                                                             print_bold("accuracy"),
+                                                             accuracy)
         else:
-            result = "{}: {}; {}: {}; {}: {}".format(print_bold("search location"),
+            result = "{}: {}; {}: {}; {}: {}, {}: {}".format(print_bold("search location"),
                                                      self.search_location.name,
                                                      print_bold("pattern"),
                                                      self._search_pattern,
                                                      print_bold("relevance"),
-                                                     relevance)
+                                                     relevance,
+                                                     print_bold("accuracy"),
+                                                     accuracy)
         return result

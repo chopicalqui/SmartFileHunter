@@ -48,7 +48,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, address=args.host, port=args.port, service_name=HunterType.smb.name, **kwargs)
+        super().__init__(args, address=args.host, port=args.port, service_name=HunterType.smb, **kwargs)
         self.username = args.username
         if args.password:
             self.password = args.password
@@ -137,5 +137,5 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                             content = file.read()
                     path.file = File(content=content)
                     # Add file to queue
-                    logger.debug("enqueue file: {}".format(path.full_path))
+                    logger.debug("enqueue file: {}".format(str(path)))
                     self.file_queue.put(path)

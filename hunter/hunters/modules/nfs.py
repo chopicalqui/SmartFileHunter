@@ -43,7 +43,7 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, address=args.host, port=args.port, service_name=HunterType.nfs.name, **kwargs)
+        super().__init__(args, address=args.host, port=args.port, service_name=HunterType.nfs, **kwargs)
         self.path = args.path
         self.version = args.version
         self.connection_string = "nfs://{}/{}?version={}&nfsport={}".format(self.service.host.address,
@@ -64,7 +64,7 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                 stats = self.client.stat(full_path)
                 file_size = stats['size']
                 if stat.S_ISDIR(stats['mode']):
-                    self.enumerate(full_path)
+                    self._enumerate(full_path)
                 elif self.is_file_size_below_threshold(file_size):
                     path = Path(service=self.service,
                                 full_path=item,
@@ -73,5 +73,5 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                                 creation_time=datetime.fromtimestamp(stats['ctime']['sec'], tz=timezone.utc))
                     content = self.client.open(full_path, mode='rb').read()
                     path.file = File(content=bytes(content))
-                    logger.debug("enqueue file: {}".format(path.full_path))
+                    logger.debug("enqueue file: {}".format(str(path)))
                     self.file_queue.put(path)

@@ -42,14 +42,18 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, address=args.host, port=21, service_name=HunterType.ftp.name, **kwargs)
+        super().__init__(args, address=args.host, port=args.port, service_name=HunterType.ftp, **kwargs)
         self.username = args.username
         self.password = args.password
         self.tls = args.tls
         if self.tls:
-            self.client = ftplib.FTP_TLS(host=self.service.host.address, user=self.username, passwd=self.password)
+            self.client = ftplib.FTP_TLS()
+            self.client.connect(self.service.host.address, self.service.port)
+            self.client.login(user=self.username, passwd=self.password, secure=False)
         else:
-            self.client = ftplib.FTP(host=self.service.host.address, user=self.username, passwd=self.password)
+            self.client = ftplib.FTP()
+            self.client.connect(self.service.host.address, self.service.port)
+            self.client.login(self.username, self.password)
         if self.verbose:
             self.client.getwelcome()
 
@@ -67,7 +71,7 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
             item_type = facts["type"]
             file_size = int(facts["size"]) if "size" in facts else 0
             if item_type == "dir":
-                self.enumerate(os.path.join(cwd, full_path))
+                self._enumerate(os.path.join(cwd, full_path))
             elif item_type == "file" and self.is_file_size_below_threshold(file_size):
                 last_modified = facts["modify"]
                 modified_time = datetime.strptime(last_modified, '%Y%m%d%H%M%S') \
@@ -83,7 +87,7 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
                         content = file.read()
                 path.file = File(content=content)
                 # Add file to queue
-                logger.debug("enqueue file: {}".format(path.full_path))
+                logger.debug("enqueue file: {}".format(str(path)))
                 self.file_queue.put(path)
             else:
                 logger.debug("skip type item: {} (type: {})".format(name, item_type))

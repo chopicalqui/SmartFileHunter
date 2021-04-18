@@ -58,14 +58,14 @@ class FileAnalzer(Thread):
         self.engine = engine
         self.config = config
         self.file_queue = file_queue
-        self._id = self.ID
-        self.ID += 1
+        FileAnalzer.ID += 1
+        self._id = FileAnalzer.ID
         self._number_of_processed_files = 0
 
     def run(self):
         while True:
             path = self.file_queue.get()
-            logger.debug("thread {} dequeues path: {}".format(self._id, path.full_path))
+            logger.debug("thread {} dequeues path: {}".format(self._id, str(path)))
             self.analyze(path)
             self._number_of_processed_files += 1
             self.file_queue.task_done()
@@ -90,6 +90,7 @@ class FileAnalzer(Thread):
                                                             search_location=rule.search_location,
                                                             search_pattern=rule.search_pattern,
                                                             relevance=rule.relevance,
+                                                            accuracy=rule.accuracy,
                                                             category=rule.category)
                     file = self.engine.add_file(session=session,
                                                 workspace=workspace,
@@ -113,7 +114,7 @@ class FileAnalzer(Thread):
         result = None
         for rule in self.config.matching_rules[SearchLocation.file_content.name]:
             if rule.is_match(path):
-                logger.info("Match: {} ({})".format(path.full_path, rule.get_text(not self._args.nocolor)))
+                logger.info("Match: {} ({})".format(str(path), rule.get_text(not self._args.nocolor)))
                 result = rule.relevance
                 self.add_content(path=path, rule=rule)
                 break
@@ -128,7 +129,7 @@ class FileAnalzer(Thread):
         result = None
         for rule in self.config.matching_rules[SearchLocation.file_name.name]:
             if rule.is_match(path):
-                logger.info("Match: {} ({})".format(path.full_path, rule.get_text(not self._args.nocolor)))
+                logger.info("Match: {} ({})".format(str(path), rule.get_text(not self._args.nocolor)))
                 result = rule.relevance
                 self.add_content(rule=rule, path=path)
                 break

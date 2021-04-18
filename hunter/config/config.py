@@ -73,7 +73,8 @@ class FileHunter(BaseConfig):
                 logging.error("failed to compile regex: {}".format(match_rule["search_pattern"]))
         # sort matching rules according to their priority
         for key, value in self.matching_rules.items():
-            self.matching_rules[key] = sorted(value, key=lambda rule: rule.priority)
+            self.matching_rules[key] = sorted(value, key=lambda rule: rule.priority, reverse=True)
+        pass
 
 
 class Database(BaseConfig):

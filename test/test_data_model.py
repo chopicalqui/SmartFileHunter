@@ -33,6 +33,7 @@ from database.model import File
 from database.model import MatchRule
 from database.model import SearchLocation
 from database.model import FileRelevance
+from database.model import MatchRuleAccuracy
 
 
 class TestWorkspace(BaseDataModelTestCase):
@@ -308,6 +309,7 @@ class TestMatchRule(BaseDataModelTestCase):
             self._test_unique_constraint(session,
                                          search_location=SearchLocation.file_name,
                                          relevance=FileRelevance.high,
+                                         accuracy=MatchRuleAccuracy.high,
                                          search_pattern=".*")
 
     def test_not_null_constraint(self):
@@ -315,13 +317,20 @@ class TestMatchRule(BaseDataModelTestCase):
         with self._engine.session_scope() as session:
             self._test_not_null_constraint(session,
                                            relevance=FileRelevance.high,
+                                           accuracy=MatchRuleAccuracy.high,
                                            search_pattern=".*")
             self._test_not_null_constraint(session,
                                            search_location=SearchLocation.file_name,
+                                           accuracy=MatchRuleAccuracy.high,
                                            search_pattern=".*")
             self._test_not_null_constraint(session,
                                            search_location=SearchLocation.file_name,
+                                           accuracy=MatchRuleAccuracy.high,
                                            relevance=FileRelevance.high)
+            self._test_not_null_constraint(session,
+                                           search_location=SearchLocation.file_name,
+                                           relevance=FileRelevance.high,
+                                           search_pattern=".*")
 
     def test_check_constraint(self):
         self.init_db()
@@ -335,7 +344,16 @@ class TestMatchRule(BaseDataModelTestCase):
                                search_location=SearchLocation.file_name,
                                category="test",
                                relevance=FileRelevance.high,
+                               accuracy=MatchRuleAccuracy.high,
                                search_pattern=".*")
+        with self._engine.session_scope() as session:
+            file_match = session.query(MatchRule).one()
+            self.assertEqual(SearchLocation.file_name, file_match.search_location)
+            self.assertEqual("test", file_match.category)
+            self.assertEqual(FileRelevance.high, file_match.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, file_match.accuracy)
+            self.assertEqual(".*", file_match.search_pattern)
+            self.assertEqual(162, file_match.priority)
 
     def test_highlight_text(self):
         text = b"""# Oracle DB properties

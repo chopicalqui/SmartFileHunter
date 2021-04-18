@@ -382,6 +382,7 @@ class Engine:
                        search_location: SearchLocation,
                        search_pattern: str,
                        relevance: FileRelevance,
+                       accuracy: MatchRuleAccuracy,
                        category: str = None) -> MatchRule:
         """
         This method should be used to add a match rule to the database
@@ -389,6 +390,7 @@ class Engine:
         :param search_location: The match rule's search location
         :param search_pattern: The match rule's search pattern
         :param relevance: The potential relevance of the file based on the given match rule
+        :param accuracy: The accuracy of the given match rule
         :return: Database object
         """
         result = Engine.get_match_rule(session=session,
@@ -397,7 +399,8 @@ class Engine:
         if not result:
             result = MatchRule(search_location=search_location,
                                search_pattern=search_pattern,
-                               relevance=relevance)
+                               relevance=relevance,
+                               accuracy=accuracy)
             session.add(result)
             session.flush()
         if category:
