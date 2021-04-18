@@ -22,10 +22,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
+import os
+import glob
 import logging
+import tempfile
 import argparse
 from queue import Queue
+from datetime import datetime
+from datetime import timezone
 from threading import Lock
+from pyunpack import Archive
 from threading import Thread
 from database.core import Engine
 from database.model import Path
@@ -61,14 +67,26 @@ class FileAnalzer(Thread):
         FileAnalzer.ID += 1
         self._id = FileAnalzer.ID
         self._number_of_processed_files = 0
+        self._number_of_failed_files = 0
 
     def run(self):
         while True:
-            path = self.file_queue.get()
-            logger.debug("thread {} dequeues path: {}".format(self._id, str(path)))
-            self.analyze(path)
-            self._number_of_processed_files += 1
+            try:
+                path = self.file_queue.get()
+                logger.debug("thread {:00d} dequeues path: {}".format(self._id, str(path)))
+                self._number_of_processed_files += 1
+                self.analyze(path)
+            except Exception as ex:
+                logger.exception(ex)
+                self._number_of_failed_files += 1
             self.file_queue.task_done()
+
+    def __repr__(self):
+        return "thread {:>3d}: " \
+               "files processed (success): {:>5d}\t" \
+               "files processed (failed): {:>5d}".format(self._id,
+                                                         self._number_of_processed_files,
+                                                         self._number_of_failed_files)
 
     def add_content(self, path: Path, rule: MatchRule = None, file: File = None):
         if rule and file:
@@ -135,6 +153,31 @@ class FileAnalzer(Thread):
                 break
         return result
 
+    def _extract_archive(self, path: Path):
+        """
+        This method extracts and analyses the given archive file.
+        """
+        with tempfile.NamedTemporaryFile() as file_name:
+            with open(file_name.name, "wb") as file:
+                file.write(path.file.content)
+            with tempfile.TemporaryDirectory() as dir_name:
+                Archive(file_name.name).extractall(dir_name)
+                for item in glob.glob(dir_name + "/**", recursive=True):
+                    stats = os.stat(item)
+                    if os.path.isfile(item):
+                        full_path = item.replace(dir_name, path.full_path, 1)
+                        with open(item, "rb") as file:
+                            content = file.read()
+                        tmp = Path(service=path.service,
+                                   full_path=full_path,
+                                   access_time=datetime.fromtimestamp(stats.st_atime, tz=timezone.utc),
+                                   modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+                                   creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc),
+                                   file=File(content=content))
+                        self.analyze(tmp)
+                    elif os.path.isfile(item):
+                        logger.debug("skip file: {}".format(item))
+
     def analyze(self, path: Path) -> None:
         """
         This method analyses the given path object to determine its relevance for the penetration test.
@@ -150,9 +193,14 @@ class FileAnalzer(Thread):
             if exists:
                 self.add_content(path=path, file=file)
         if not exists:
-            if "zip archive data" in path.file.file_type:
-                pass
-            else:
+            success = False
+            if self.config.is_archive(path):
+                try:
+                    self._extract_archive(path)
+                    success = True
+                except Exception as ex:
+                    logger.exception(ex)
+            if not success:
                 result = False
                 # 1. Try analyzing the content of every file (even binary files)
                 try:
@@ -162,3 +210,4 @@ class FileAnalzer(Thread):
                 # If content search did not return any results or failed, then just analyze the file name
                 if not result:
                     self._analyze_path_name(path)
+

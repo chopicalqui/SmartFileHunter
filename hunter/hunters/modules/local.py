@@ -52,7 +52,7 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
         """
         for path in self.path:
             path = path if path[-1] == "/" else path + "/"
-            for item in glob.glob(path + "**", recursive=True):
+            for item in glob.iglob(path + "**", recursive=True):
                 stats = os.stat(item)
                 if os.path.isfile(item) and self.is_file_size_below_threshold(stats.st_size):
                     path = Path(service=self.service,

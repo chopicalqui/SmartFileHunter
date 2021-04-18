@@ -42,7 +42,8 @@ class BaseSensitiveFileHunter:
 
     def __init__(self,
                  args: argparse.Namespace,
-                 file_queue: Queue, temp_dir,
+                 file_queue: Queue,
+                 temp_dir: str,
                  config: FileHunterConfig,
                  address: str,
                  service_name: HunterType,
@@ -60,6 +61,7 @@ class BaseSensitiveFileHunter:
         self.temp_dir = temp_dir
         self.file_queue = file_queue
         self._engine = engine
+        self._args = args
         self.file_size_threshold = self.config.config["general"].getint("max_file_size_bytes")
         # we add the current host and service to the database so that the consumer threads can use them
         with engine.session_scope() as session:

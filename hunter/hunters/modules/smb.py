@@ -114,7 +114,8 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                 logger.debug("enumerate share: {}".format(name))
                 self.__enumerate(name)
             except SessionError as ex:
-                logger.exception(ex)
+                if self._args.debug:
+                    logger.exception(ex)
             except Exception as ex:
                 if "STATUS_ACCESS_DENIED" not in str(ex):
                     logger.exception(ex)

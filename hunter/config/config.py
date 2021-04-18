@@ -61,6 +61,7 @@ class FileHunter(BaseConfig):
     def __init__(self):
         super().__init__("hunters.config")
         self.matching_rules = {}
+        self.supported_archives = []
         self.kali_packages = json.loads(self.get_config_str("setup", "kali_packages"))
         self.scripts = json.loads(self.get_config_str("setup", "scripts"))
         for match_rule in json.loads(self.get_config_str("general", "match_rules")):
@@ -74,7 +75,15 @@ class FileHunter(BaseConfig):
         # sort matching rules according to their priority
         for key, value in self.matching_rules.items():
             self.matching_rules[key] = sorted(value, key=lambda rule: rule.priority, reverse=True)
-        pass
+        for item in json.loads(self.get_config_str("general", "supported_archives")):
+            if item not in self.supported_archives:
+                self.supported_archives.append(item.lower())
+
+    def is_archive(self, path) -> bool:
+        """
+        Returns true if the given path file has an extension in the self.supported_archives list.
+        """
+        return path and path.extension and path.extension.lower() in self.supported_archives
 
 
 class Database(BaseConfig):

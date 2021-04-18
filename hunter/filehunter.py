@@ -199,6 +199,7 @@ if __name__ == "__main__":
             elif args.module == HunterType.local.name:
                 enumeration_class = LocalSensitiveFileHunter
             if enumeration_class:
+                analyzers = []
                 engine = Engine()
                 config = FileHunterConfig()
                 file_queue = Queue(maxsize=20)
@@ -208,11 +209,17 @@ if __name__ == "__main__":
                     workspace = engine.get_workspace(session=session, name=args.workspace, ignore=args.ignore)
                 # Create analysis/consumer threads
                 for i in range(args.threads):
-                    FileAnalzer(args=args, engine=engine, file_queue=file_queue, config=config).start()
+                    analyzer = FileAnalzer(args=args, engine=engine, file_queue=file_queue, config=config)
+                    analyzers.append(analyzer)
+                    analyzer.start()
                 hunter = enumeration_class(args, engine=engine, file_queue=file_queue, config=config, temp_dir=temp_dir)
                 hunter.enumerate()
-                logger.info("Enumeration finished: {}".format(file_queue.qsize()))
+                logger.info("consumer thread finished enumeration. current queue "
+                            "size: {:>2d}".format(file_queue.qsize()))
                 file_queue.join()
+                # print statistics
+                for item in analyzers:
+                    logger.info("completed consumer " + str(item))
                 with engine.session_scope() as session:
                     service = session.query(Service) \
                         .join(Host) \

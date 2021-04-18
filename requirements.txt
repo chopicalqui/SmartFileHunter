@@ -4,3 +4,5 @@ libnfs
 python-magic
 openpyxl
 hexdump
+pyunpack
+patool
