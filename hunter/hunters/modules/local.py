@@ -43,7 +43,7 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
 
     def __init__(self, args: argparse.Namespace, **kwargs):
         super().__init__(args, address="127.0.0.1", service_name=HunterType.local, **kwargs)
-        self.path = args.path
+        self.path = [os.path.abspath(item) for item in args.path]
 
     def _enumerate(self) -> None:
         """

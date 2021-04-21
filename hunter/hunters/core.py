@@ -50,6 +50,7 @@ class BaseSensitiveFileHunter:
                  engine: Engine,
                  port: int = None,
                  **kwargs):
+        self.client = None
         self.service = Service(port=port, name=service_name)
         self.service.host = Host(address=address)
         self.service.workspace = Workspace(name=args.workspace)

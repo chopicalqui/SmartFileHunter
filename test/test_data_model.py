@@ -144,7 +144,7 @@ class TestService(BaseDataModelTestCase):
     def test_repr_with_host(self):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.smb, port=445, host=host)
-        self.assertEqual("smb://127.0.0.1:445", str(service))
+        self.assertEqual("//127.0.0.1", str(service))
 
     def test_repr_with_host_without_port(self):
         host = Host(address="127.0.0.1")
@@ -274,25 +274,37 @@ class TestPath(BaseDataModelTestCase):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.smb, port=445, host=host)
         path = Path(full_path="/IT/creds.txt", share="$D", service=service)
-        self.assertEqual("smb://127.0.0.1:445/$D/IT/creds.txt", str(path))
+        self.assertEqual("//127.0.0.1/$D/IT/creds.txt", str(path))
+
+    def test_repr_with_host_and_smb_service_non_standard_port(self):
+        host = Host(address="127.0.0.1")
+        service = Service(name=HunterType.smb, port=4445, host=host)
+        path = Path(full_path="/IT/creds.txt", share="$D", service=service)
+        self.assertEqual("//127.0.0.1:4445/$D/IT/creds.txt", str(path))
 
     def test_repr_with_host_and_ftp_service_01(self):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.ftp, port=21, host=host)
         path = Path(full_path="/IT/creds.txt", service=service)
-        self.assertEqual("ftp://127.0.0.1:21/IT/creds.txt", str(path))
+        self.assertEqual("ftp://127.0.0.1/IT/creds.txt", str(path))
 
     def test_repr_with_host_and_ftp_service_02(self):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.ftp, port=21, host=host)
         path = Path(full_path="IT/creds.txt", service=service)
-        self.assertEqual("ftp://127.0.0.1:21/IT/creds.txt", str(path))
+        self.assertEqual("ftp://127.0.0.1/IT/creds.txt", str(path))
+
+    def test_repr_with_host_and_ftp_service_non_standard_port(self):
+        host = Host(address="127.0.0.1")
+        service = Service(name=HunterType.ftp, port=2221, host=host)
+        path = Path(full_path="IT/creds.txt", service=service)
+        self.assertEqual("ftp://127.0.0.1:2221/IT/creds.txt", str(path))
 
     def test_repr_with_host_and_ftp_service_and_path_is_none(self):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.ftp, port=21, host=host)
         path = Path(service=service)
-        self.assertEqual("ftp://127.0.0.1:21", str(path))
+        self.assertEqual("ftp://127.0.0.1", str(path))
 
 
 class TestMatchRule(BaseDataModelTestCase):

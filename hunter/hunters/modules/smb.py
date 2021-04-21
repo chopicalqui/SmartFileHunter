@@ -24,6 +24,7 @@ __version__ = 0.1
 
 import os
 import ntpath
+import getpass
 import logging
 import argparse
 import tempfile
@@ -49,6 +50,8 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
 
     def __init__(self, args: argparse.Namespace, **kwargs):
         super().__init__(args, address=args.host, port=args.port, service_name=HunterType.smb, **kwargs)
+        if (args.password or args.prompt_for_password or args.hash or args.prompt_for_hash) and not args.username:
+            raise ValueError("arguments -p, -h, -P, and -H require a username")
         if args.username:
             self.username = args.username
         else:
@@ -59,6 +62,13 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             self.nt_hash = ''
         elif args.hash:
             self.lm_hash, self.nt_hash = args.hash.split(':')
+        elif args.prompt_for_password:
+            self.password = getpass.getpass("password: ")
+            self.lm_hash = ''
+            self.nt_hash = ''
+        elif args.prompt_for_hash:
+            self.nt_hash = getpass.getpass("NTLM hash: ")
+            self.lm_hash = ''
         else:
             self.password = ''
             self.lm_hash = ''
@@ -79,7 +89,8 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         self.shares = args.shares if args.shares else self.list_shares()
 
     def __del__(self):
-        self.client.close()
+        if self.client:
+            self.client.close()
 
     def pathify(self, path):
         """
@@ -113,12 +124,8 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             try:
                 logger.debug("enumerate share: {}".format(name))
                 self.__enumerate(name)
-            except SessionError as ex:
-                if self._args.debug:
-                    logger.exception(ex)
-            except Exception as ex:
-                if "STATUS_ACCESS_DENIED" not in str(ex):
-                    logger.exception(ex)
+            except Exception:
+                logger.error("cannot access share: {}/{}".format(str(self.service), name), exc_info=self._args.verbose)
 
     def __enumerate(self, share: str, directory: str = "/") -> None:
         items = self.client.listPath(share, self.pathify(directory))

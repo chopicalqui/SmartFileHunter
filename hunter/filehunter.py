@@ -24,9 +24,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import sys
+import ftplib
 import logging
 import argparse
 import tempfile
+import impacket
 from queue import Queue
 from database.core import Engine
 from database.core import ManageDatabase
@@ -57,6 +59,8 @@ if __name__ == "__main__":
                                                                     "add it")
     parser.add_argument("--nocolor", action='store_true', help="disable color coding")
     parser.add_argument("-d", "--debug", action='store_true', help="print debug messages to standard output")
+    parser.add_argument("-v", "--verbose", action='store_true', help="print additional information (e.g., stack traces "
+                                                                     "or banner information")
     parser.add_argument("--log", metavar="FILE", type=str, help="log messages to the given file")
     sub_parser = parser.add_subparsers(help='list of available file hunter modules', dest="module")
     parser_database = sub_parser.add_parser('db', help='allows setting up and managing the database')
@@ -88,7 +92,10 @@ if __name__ == "__main__":
                                  choices=[item.name for item in DatabaseType],
                                  help="like --setup but just prints commands for initial setup for filehunter")
     # setup console parser
-    parser_review.add_argument('-w', '--workspace', type=str, help='the workspace used for the enumeration')
+    parser_review.add_argument('-w', '--workspace',
+                               required=True,
+                               type=str,
+                               help='the workspace used for the enumeration')
     # setup report parser
     parser_report.add_argument('-w', '--workspace',
                                nargs="+",
@@ -98,7 +105,6 @@ if __name__ == "__main__":
     parser_report.add_argument('-e', '--excel', type=str, help="write report to given excel file")
     parser_report.add_argument('-c', '--csv', action="store_true", help="print report results to stdout as CSV")
     # setup SMB parser
-    parser_smb.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_smb.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
     parser_smb.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     parser_smb.add_argument('-t', '--threads', type=int, default=default_thread_count,
@@ -120,8 +126,11 @@ if __name__ == "__main__":
                                              metavar="LMHASH:NTHASH", help='NTLM hashes, format is LMHASH:NTHASH')
     parser_smb_credential_group.add_argument('-p', '--password', action="store",
                                              metavar="PASSWORD", help='password of given user')
+    parser_smb_credential_group.add_argument('-P', dest="prompt_for_password", action="store_true",
+                                             help='ask for the password via an user input prompt')
+    parser_smb_credential_group.add_argument('-H', dest="prompt_for_hash", action="store_true",
+                                             help='ask for the hash via an user input prompt')
     # setup FTP parser
-    parser_ftp.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_ftp.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
     parser_ftp.add_argument('--tls', action="store_true", help='use TLS')
     parser_ftp.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
@@ -134,10 +143,12 @@ if __name__ == "__main__":
     ftp_authentication_group = parser_ftp.add_argument_group('authentication')
     ftp_authentication_group.add_argument('-u', '--username', action="store", default='',
                                           metavar="USERNAME", help='the name of the user to use for authentication')
-    ftp_authentication_group.add_argument('-p', '--password', action="store", default='',
-                                          metavar="PASSWORD", help='password of given user')
+    parser_ftp_credential_group = ftp_authentication_group.add_mutually_exclusive_group()
+    parser_ftp_credential_group.add_argument('-p', '--password', action="store", default='',
+                                             metavar="PASSWORD", help='password of given user')
+    parser_ftp_credential_group.add_argument('-P', dest="prompt_for_password", action="store_true",
+                                             help='ask for the password via an user input prompt')
     # setup NFS parser
-    parser_nfs.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_nfs.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
     parser_nfs.add_argument('--version', type=int, choices=[3, 4], default=3, help='NFS version to use')
     parser_nfs.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
@@ -149,7 +160,6 @@ if __name__ == "__main__":
                                   help="the target NFS service's port")
     nfs_target_group.add_argument('--path', type=str, metavar="PATH", help="path to enumerate")
     # setup local parser
-    parser_local.add_argument('-v', '--verbose', action="store_true", help='create verbose output')
     parser_local.add_argument('-w', '--workspace', type=str, required=True,
                               help='the workspace used for the enumeration')
     parser_local.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
@@ -217,11 +227,11 @@ if __name__ == "__main__":
                     analyzer.start()
                 hunter = enumeration_class(args, engine=engine, file_queue=file_queue, config=config, temp_dir=temp_dir)
                 hunter.enumerate()
-                if args.debug:
+                if args.verbose:
                     logger.info("consumer thread finished enumeration. current queue "
                                 "size: {:>2d}".format(file_queue.qsize()))
                 file_queue.join()
-                if args.debug:
+                if args.verbose:
                     # print statistics
                     for item in analyzers:
                         logger.info("completed consumer " + str(item))
@@ -234,6 +244,12 @@ if __name__ == "__main__":
                                     Service.port == hunter.port).one()
                         service.complete = True
     except WorkspaceNotFound as ex:
-        print(str(ex), file=sys.stderr)
+        pass
+    except ftplib.error_perm:
+        logger.error("FTP login failed", exc_info=args.verbose)
+    except impacket.smbconnection.SessionError:
+        logger.error("SMB login failed", exc_info=args.verbose)
+    except NotADirectoryError:
+        logger.error("Given item is not a directory", exc_info=args.verbose)
     except Exception as ex:
-        logger.exception(ex)
+        logger.error("execution failed", exc_info=args.verbose)

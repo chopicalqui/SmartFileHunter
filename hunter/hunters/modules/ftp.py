@@ -25,6 +25,7 @@ __version__ = 0.1
 import os
 import ftplib
 import logging
+import getpass
 import argparse
 import tempfile
 from datetime import datetime
@@ -45,6 +46,8 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
         super().__init__(args, address=args.host, port=args.port, service_name=HunterType.ftp, **kwargs)
         self.username = args.username
         self.password = args.password
+        if args.prompt_for_password:
+            self.password = getpass.getpass(prompt="password: ")
         self.tls = args.tls
         if self.tls:
             self.client = ftplib.FTP_TLS()
@@ -58,7 +61,8 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
             self.client.getwelcome()
 
     def __del__(self):
-        self.client.close()
+        if self.client:
+            self.client.close()
 
     def _enumerate(self, cwd: str = None) -> None:
         """
@@ -66,28 +70,36 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
         :return:
         """
         cwd = self.client.pwd() if not cwd else cwd
-        for name, facts in self.client.mlsd(cwd):
-            full_path = os.path.join(cwd, name)
-            item_type = facts["type"]
-            file_size = int(facts["size"]) if "size" in facts else 0
-            if item_type == "dir":
-                self._enumerate(os.path.join(cwd, full_path))
-            elif item_type == "file" and self.is_file_size_below_threshold(file_size):
-                last_modified = facts["modify"]
-                modified_time = datetime.strptime(last_modified, '%Y%m%d%H%M%S') \
-                    if last_modified else None
-                path = Path(service=self.service,
-                            full_path=full_path,
-                            modified_time=modified_time)
-                # Obtain file content
-                with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
-                    with open(temp.name, "wb") as file:
-                        self.client.retrbinary('RETR {}'.format(full_path), file.write)
-                    with open(temp.name, "rb") as file:
-                        content = file.read()
-                path.file = File(content=content)
-                # Add file to queue
-                logger.debug("enqueue file: {}".format(str(path)))
-                self.file_queue.put(path)
-            else:
-                logger.debug("skip type item: {} (type: {})".format(name, item_type))
+        try:
+            for name, facts in self.client.mlsd(cwd):
+                full_path = os.path.join(cwd, name)
+                item_type = facts["type"]
+                file_size = int(facts["size"]) if "size" in facts else 0
+                if item_type == "dir":
+                    self._enumerate(os.path.join(cwd, full_path))
+                elif item_type == "file" and self.is_file_size_below_threshold(file_size):
+                    last_modified = facts["modify"]
+                    modified_time = datetime.strptime(last_modified, '%Y%m%d%H%M%S') \
+                        if last_modified else None
+                    path = Path(service=self.service,
+                                full_path=full_path,
+                                modified_time=modified_time)
+                    try:
+                        # Obtain file content
+                        with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
+                            with open(temp.name, "wb") as file:
+                                self.client.retrbinary('RETR {}'.format(full_path), file.write)
+                            with open(temp.name, "rb") as file:
+                                content = file.read()
+                        path.file = File(content=content)
+                        # Add file to queue
+                        logger.debug("enqueue file: {}".format(str(path)))
+                        self.file_queue.put(path)
+                    except ftplib.error_perm:
+                        # Catch permission exception, if FTP user does not have read permission on a certain file
+                        logger.error("cannot read file: {}".format(str(path)), exc_info=self._args.verbose)
+                else:
+                    logger.debug("skip type item: {} (type: {})".format(name, item_type))
+        except ftplib.error_perm:
+            # Catch permission exception, if FTP user does not have read permission on a certain directory
+            logger.error("cannot access item: {}/{}".format(str(self.service), str(cwd)), exc_info=self._args.verbose)

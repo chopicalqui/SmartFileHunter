@@ -157,8 +157,13 @@ class Service(DeclarativeBase):
     def __repr__(self):
         result = ""
         if self.host:
-            result = "{}://{}".format(self.name.name, self.host.address)
-            if self.port:
+            if self.name == HunterType.smb:
+                result = "//{}".format(self.host.address)
+            else:
+                result = "{}://{}".format(self.name.name, self.host.address)
+            if self.port and (self.name == HunterType.smb and self.port != 445 or
+                              self.name == HunterType.ftp and self.port != 21 or
+                              self.name == HunterType.nfs and self.port != 2049):
                 result += ":{}".format(self.port)
         return result
 
