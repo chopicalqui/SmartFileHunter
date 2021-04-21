@@ -29,7 +29,6 @@ import magic
 import enum
 import logging
 import hexdump
-import sqlalchemy as sa
 from sqlalchemy import Column
 from sqlalchemy import Integer
 from sqlalchemy import Boolean
@@ -39,13 +38,10 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import Text
 from sqlalchemy import Enum
 from sqlalchemy import Table
-from sqlalchemy.ext.mutable import Mutable
+from sqlalchemy import LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import backref
 from sqlalchemy import UniqueConstraint
-from sqlalchemy.dialects.postgresql import INET
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.dialects.postgresql import BYTEA
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from termcolor import colored
@@ -97,50 +93,6 @@ class SearchLocation(enum.Enum):
     file_content = 0
 
 
-class CastingArray(ARRAY):
-    def bind_expression(self, bindvalue):
-        return sa.cast(bindvalue, self)
-
-
-class MutableList(Mutable, list):
-    def append(self, value):
-        list.append(self, value)
-        self.changed()
-
-    @classmethod
-    def coerce(cls, key, value):
-        if not isinstance(value, MutableList):
-            if isinstance(value, list):
-                return MutableList(value)
-            return Mutable.coerce(key, value)
-        else:
-            return value
-
-
-class MutableDict(Mutable, dict):
-    @classmethod
-    def coerce(cls, key, value):
-        "Convert plain dictionaries to MutableDict."
-        if not isinstance(value, MutableDict):
-            if isinstance(value, dict):
-                return MutableDict(value)
-
-            # this call will raise ValueError
-            return Mutable.coerce(key, value)
-        else:
-            return value
-
-    def __setitem__(self, key, value):
-        "Detect dictionary set events and emit change events."
-        dict.__setitem__(self, key, value)
-        self.changed()
-
-    def __delitem__(self, key):
-        "Detect dictionary del events and emit change events."
-        dict.__delitem__(self, key)
-        self.changed()
-
-
 file_match_rule_mapping = Table("file_match_rule_mapping", DeclarativeBase.metadata,
                                 Column("id", Integer, primary_key=True),
                                 Column("file_id", Integer, ForeignKey('file.id',
@@ -174,7 +126,7 @@ class Host(DeclarativeBase):
 
     __tablename__ = "host"
     id = Column("id", Integer, primary_key=True)
-    address = Column("address", INET, nullable=False, unique=False)
+    address = Column("address", Text, nullable=False, unique=False)
     workspace_id = Column(Integer, ForeignKey("workspace.id", ondelete='cascade'), nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
@@ -261,7 +213,7 @@ class File(DeclarativeBase):
 
     __tablename__ = "file"
     id = Column(Integer, primary_key=True)
-    _content = Column("content", BYTEA, nullable=True, unique=False)
+    _content = Column("content", LargeBinary, nullable=True, unique=False)
     size_bytes = Column(Integer, nullable=False, unique=False)
     sha256_value = Column(Text, nullable=False, unique=False)
     file_type = Column(Text, nullable=True, unique=False)

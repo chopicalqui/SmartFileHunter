@@ -22,12 +22,18 @@ __version__ = 0.1
 
 import os
 import re
+import enum
 import json
 import logging
 import configparser
 from database.model import MatchRule
 
 logger = logging.getLogger("config")
+
+
+class DatabaseType(enum.Enum):
+    sqlite = enum.auto()
+    postgresql = enum.auto()
 
 
 class BaseConfig:
@@ -86,44 +92,60 @@ class FileHunter(BaseConfig):
         return path and path.extension and path.extension.lower() in self.supported_archives
 
 
-class Database(BaseConfig):
-    """This class contains the ConfigParser object for the database"""
+class BaseDatabase(BaseConfig):
+    """
+    This class contains base functionality for all databases.
+    """
 
-    def __init__(self, production: bool = True):
+    def __init__(self,
+                 production_section: str,
+                 unittest_section: str,
+                 production: bool = True):
         super().__init__("database.config")
         self._production = production
+        self._production_section = production_section
+        self._unittest_section = unittest_section
 
     @property
     def dialect(self) -> str:
-        return self.get_config_str("production", "dialect")
+        return self.get_config_str(self._production_section, "dialect")
+
+
+class DatabasePostgreSql(BaseDatabase):
+    """This class contains the ConfigParser object for the database"""
+
+    def __init__(self, production: bool = True):
+        super().__init__(production=production,
+                         production_section="postgresql_production",
+                         unittest_section="postgresql_unittesting")
 
     @property
     def host(self) -> str:
-        return self.get_config_str("production", "host")
+        return self.get_config_str(self._production_section, "host")
 
     @property
     def port(self) -> int:
-        return self.get_config_int("production", "port")
+        return self.get_config_int(self._production_section, "port")
 
     @property
     def username(self) -> str:
-        return self.get_config_str("production", "username")
+        return self.get_config_str(self._production_section, "username")
 
     @property
     def password(self) -> str:
-        return self.get_config_str("production", "password")
+        return self.get_config_str(self._production_section, "password")
 
     @password.setter
     def password(self, value: str) -> None:
-        self.config["production"]["password"] = value
+        self.config[self._production_section]["password"] = value
 
     @property
     def production_database(self) -> str:
-        return self.get_config_str("production", "database")
+        return self.get_config_str(self._production_section, "database")
 
     @property
     def test_database(self) -> str:
-        return self.get_config_str("unittesting", "database")
+        return self.get_config_str(self._unittest_section, "database")
 
     @property
     def database(self) -> str:
@@ -137,3 +159,107 @@ class Database(BaseConfig):
                                             self.host,
                                             self.port,
                                             self.database)
+
+
+class DatabaseSqlite(BaseDatabase):
+    """This class contains the ConfigParser object for the database"""
+
+    def __init__(self, production: bool = True):
+        super().__init__(production=production,
+                         production_section="sqlite_production",
+                         unittest_section="sqlite_unittesting")
+
+    @property
+    def production_name(self) -> str:
+        return os.path.abspath(os.path.join(self._config_dir, "..", self.get_config_str(self._production_section, "name")))
+
+    @property
+    def test_name(self) -> str:
+        return os.path.abspath(os.path.join(self._config_dir, "..", self.get_config_str(self._unittest_section, "name")))
+
+    @property
+    def path(self) -> str:
+        return self.production_name if self._production else self.test_name
+
+    @property
+    def connection_string(self):
+        return "{}+pysqlite:///{}".format(self.dialect, self.path)
+
+
+class DatabaseFactory(BaseConfig):
+    """
+    This class manages the database configuration
+    """
+
+    def __init__(self, production: bool = True):
+        super().__init__("database.config")
+        self._database = None
+        self.production = production
+        self.type = self.get_config_str("database", "active")
+
+    @property
+    def type(self) -> str:
+        return DatabaseType[self._type]
+
+    @type.setter
+    def type(self, value: str):
+        self._type = DatabaseType[value]
+        if self._type == DatabaseType.postgresql:
+            self._database = DatabasePostgreSql(self.production)
+        elif self._type == DatabaseType.sqlite:
+            self._database = DatabaseSqlite(self.production)
+        else:
+            raise NotImplementedError("database type not implemented")
+        self.config["database"]["active"] = value
+
+    @property
+    def is_postgres(self) -> bool:
+        return self._type == DatabaseType.postgresql
+
+    @property
+    def production_database(self):
+        result = None
+        if self.is_postgres:
+            result = self._database.production_database
+        return result
+
+    @property
+    def test_database(self):
+        result = None
+        if self.is_postgres:
+            result = self._database.test_database
+        return result
+
+    @property
+    def username(self):
+        result = None
+        if self.is_postgres:
+            result = self._database.username
+        return result
+
+    @property
+    def password(self) -> str:
+        result = None
+        if self.is_postgres:
+            result = self._database.password
+        return result
+
+    @password.setter
+    def password(self, value: str) -> None:
+        if self.is_postgres:
+            self._database.password = value
+
+    @property
+    def database(self) -> str:
+        result = None
+        if self.is_postgres:
+            result = self.production_database if self.production else self.test_database
+        return result
+
+    @property
+    def databases(self) -> list:
+        return [self.production_database, self.test_database] if self.is_postgres else []
+
+    @property
+    def connection_string(self):
+        return self._database.connection_string

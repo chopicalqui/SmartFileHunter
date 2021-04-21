@@ -26,12 +26,12 @@ import time
 import passgen
 import argparse
 import tempfile
+import ipaddress
 import subprocess
 from threading import Thread
 from sqlalchemy import create_engine
-from config import config
+from config.config import DatabaseFactory
 from config.config import FileHunter as FileHunterConfig
-from config.config import Database as DatabaseConfig
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
@@ -50,7 +50,7 @@ class Engine:
 
     def __init__(self, production: bool = True):
         self.production = production
-        self._config = config.Database(production)
+        self._config = DatabaseFactory(production)
         self.engine = create_engine(self._config.connection_string)
         self._session_factory = sessionmaker(bind=self.engine)
         self._Session = scoped_session(self._session_factory)
@@ -79,11 +79,11 @@ class Engine:
 
     def _create_tables(self) -> None:
         """This method creates all tables."""
-        DeclarativeBase.metadata.create_all(self.engine, checkfirst=True)
+        DeclarativeBase.metadata.create_all(self.engine)
 
     def _drop_tables(self) -> None:
         """This method drops all tables in the database."""
-        DeclarativeBase.metadata.drop_all(self.engine, checkfirst=True)
+        DeclarativeBase.metadata.drop_all(self.engine)
 
     def print_workspaces(self):
         with self.session_scope() as session:
@@ -109,13 +109,14 @@ class Engine:
         :param file:
         :return:
         """
-        if os.path.exists(file):
-            raise FileExistsError("the file '{}' exists.".format(file))
-        with open(file, "wb") as file:
-            rvalue = subprocess.Popen(['sudo', '-u', 'postgres', 'pg_dump', self._config.database],
-                                      stdout=file, stderr=subprocess.DEVNULL).wait()
-        if rvalue != 0:
-            raise subprocess.CalledProcessError("creating backup failed with return code {}".format(rvalue))
+        if self._config.is_postgres:
+            if os.path.exists(file):
+                raise FileExistsError("the file '{}' exists.".format(file))
+            with open(file, "wb") as file:
+                rvalue = subprocess.Popen(['sudo', '-u', 'postgres', 'pg_dump', self._config.database],
+                                          stdout=file, stderr=subprocess.DEVNULL).wait()
+            if rvalue != 0:
+                raise subprocess.CalledProcessError("creating backup failed with return code {}".format(rvalue))
 
     def restore_backup(self, file: str) -> None:
         """
@@ -123,29 +124,36 @@ class Engine:
         :param file:
         :return:
         """
-        if not os.path.exists(file):
-            raise FileExistsError("the file '{}' does not exist.".format(file))
-        self.drop()
-        with open(file, "rb") as file:
-            rvalue = subprocess.Popen(['sudo', '-u', 'postgres', 'psql', self._config.database],
-                                      stdin=file, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).wait()
+        if self._config.is_postgres:
+            if not os.path.exists(file):
+                raise FileExistsError("the file '{}' does not exist.".format(file))
+            self.drop()
+            with open(file, "rb") as file:
+                rvalue = subprocess.Popen(['sudo', '-u', 'postgres', 'psql', self._config.database],
+                                          stdin=file, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).wait()
 
     def recreate_database(self):
         """
         This method drops the databases
         """
         """This method drops all views and tables in the database."""
-        with tempfile.TemporaryDirectory() as temp:
-            uid = pwd.getpwnam("postgres").pw_uid
-            gid = grp.getgrnam("postgres").gr_gid
-            os.chown(temp, uid, gid)
-            for database in [self._config.production_database, self._config.test_database]:
-                # drop database
-                subprocess.check_output("sudo -u postgres dropdb {}".format(database), shell=True, cwd=temp)
-                # create database
-                subprocess.check_output("sudo -u postgres createdb {}".format(database), shell=True, cwd=temp)
-                # assign privileges to database
-                subprocess.check_output("sudo -u postgres psql -c 'grant all privileges on database {} to {}'".format(database, self._config.username), shell=True, cwd=temp)
+        if self._config.is_postgres:
+            with tempfile.TemporaryDirectory() as temp:
+                uid = pwd.getpwnam("postgres").pw_uid
+                gid = grp.getgrnam("postgres").gr_gid
+                os.chown(temp, uid, gid)
+                for database in [self._config.production_database, self._config.test_database]:
+                    # drop database
+                    subprocess.check_output("sudo -u postgres dropdb {}".format(database), shell=True, cwd=temp)
+                    # create database
+                    subprocess.check_output("sudo -u postgres createdb {}".format(database), shell=True, cwd=temp)
+                    # assign privileges to database
+                    subprocess.check_output("sudo -u postgres psql -c 'grant all privileges "
+                                            "on database {} to {}'".format(database,
+                                                                           self._config.username),
+                                            shell=True, cwd=temp)
+        else:
+            self._drop_tables()
 
     @staticmethod
     def get_or_create(session, model, one_or_none=True, **kwargs):
@@ -221,9 +229,10 @@ class Engine:
         :param address: IPv4/IPv6 address that should be added to the database
         :return: Database object
         """
-        result = Engine.get_host(session=session, workspace=workspace, address=address)
+        ip_address = str(ipaddress.ip_address(address))
+        result = Engine.get_host(session=session, workspace=workspace, address=ip_address)
         if not result:
-            result = Host(address=address, workspace=workspace)
+            result = Host(address=ip_address, workspace=workspace)
             session.add(result)
             session.flush()
         return result
@@ -415,14 +424,16 @@ class ManageDatabase:
     def __init__(self, args: argparse.Namespace):
         self._arguments = args
         self._hunter_config = FileHunterConfig()
-        self._db_config = DatabaseConfig()
-        self._databases = [self._db_config.config.get("production", "database"),
-                           self._db_config.config.get("unittesting", "database")]
+        self._db_config = DatabaseFactory()
         self._db_config.password = passgen.passgen(30)
 
     def run(self):
-        if self._arguments.setup or self._arguments.setup_dbg:
-            self._setup(self._arguments.setup_dbg)
+        if self._arguments.setup_dbg:
+            self._db_config.type = self._arguments.setup_dbg
+            self._setup(debug=True)
+        elif self._arguments.setup:
+            self._db_config.type = self._arguments.setup
+            self._setup(debug=False)
         if self._arguments.backup:
             engine = Engine()
             DeclarativeBase.metadata.bind = engine.engine
@@ -457,34 +468,34 @@ class ManageDatabase:
             os_command = ["ln", "-sT", python_script, os.path.join("/usr/bin", base_name)]
             setup_commands.append(SetupCommand(description="creating link file for {}".format(python_script),
                                                command=os_command))
-        setup_commands.append(SetupCommand(description="adding PostgresSql database to auto start",
-                                           command=["update-rc.d", "postgresql", "enable"],
-                                           return_code=0))
-        setup_commands.append(SetupCommand(description="starting PostgreSql database",
-                                           command=["service", "postgresql", "start"],
-                                           return_code=0))
-        setup_commands.append(SetupCommand(description="adding PostgreSql database user '{}'"
-                                           .format(self._db_config.username),
-                                           command=["sudo", "-u", "postgres", "createuser",
-                                                    self._db_config.username]))
-        setup_commands.append(SetupCommand(description="setting PostgreSql database user '{}' password"
-                                           .format(self._db_config.username),
-                                           command=["sudo", "-u", "postgres", "psql", "-c",
-                                                    "alter user {} with encrypted password '{}'"
-                                           .format(self._db_config.database, self._db_config.password)]))
-        for database in self._databases:
-            setup_commands.append(SetupCommand(description=
-                                               "creating PostgreSql database '{}'".format(database),
-                                               command=["sudo", "-u", "postgres", "createdb", database]))
-            setup_commands.append(SetupCommand(description="setting PostgreSql database user '{}' "
-                                                           "permissions on database '{}'"
-                                               .format(self._db_config.username, database),
-                                               command=["sudo", "-u", "postgres", "psql", "-c",
-                                                        "grant all privileges on database {} to {}"
-                                               .format(database, self._db_config.username)],
+        if self._db_config.is_postgres:
+            setup_commands.append(SetupCommand(description="adding PostgresSql database to auto start",
+                                               command=["update-rc.d", "postgresql", "enable"],
                                                return_code=0))
-        setup_commands.append(SetupCommand(description="creating the tables, triggers, views, etc. in database {}"
-                                           .format(self._db_config.database),
+            setup_commands.append(SetupCommand(description="starting PostgreSql database",
+                                               command=["service", "postgresql", "start"],
+                                               return_code=0))
+            setup_commands.append(SetupCommand(description="adding PostgreSql database user '{}'"
+                                               .format(self._db_config.username),
+                                               command=["sudo", "-u", "postgres", "createuser",
+                                                        self._db_config.username]))
+            setup_commands.append(SetupCommand(description="setting PostgreSql database user '{}' password"
+                                               .format(self._db_config.username),
+                                               command=["sudo", "-u", "postgres", "psql", "-c",
+                                                        "alter user {} with encrypted password '{}'"
+                                               .format(self._db_config.database, self._db_config.password)]))
+            for database in self._db_config.databases:
+                setup_commands.append(SetupCommand(description=
+                                                   "creating PostgreSql database '{}'".format(database),
+                                                   command=["sudo", "-u", "postgres", "createdb", database]))
+                setup_commands.append(SetupCommand(description="setting PostgreSql database user '{}' "
+                                                               "permissions on database '{}'"
+                                                   .format(self._db_config.username, database),
+                                                   command=["sudo", "-u", "postgres", "psql", "-c",
+                                                            "grant all privileges on database {} to {}"
+                                                   .format(database, self._db_config.username)],
+                                                   return_code=0))
+        setup_commands.append(SetupCommand(description="creating the tables, triggers, views, etc.",
                                            command=["filehunter", "db", "--drop", "--init"]))
         if self._hunter_config.kali_packages:
             apt_command = ["apt-get", "install", "-q", "--yes"]
@@ -500,7 +511,7 @@ class ManageDatabase:
 
 class SetupCommand:
 
-    def __init__(self, description: str, command: List[str], return_code: int=None):
+    def __init__(self, description: str, command: List[str], return_code: int = None):
         self._description = description
         self._return_code = return_code
         self._command = command

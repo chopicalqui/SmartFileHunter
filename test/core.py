@@ -50,6 +50,14 @@ class BaseDataModelTestCase(BaseTestCase):
         super().__init__(test_name)
         self._model = model
 
+    def _check_exception(self, ex: Exception, ex_messages: list) -> bool:
+        result = False
+        for item in ex_messages:
+            result = item in str(ex)
+            if result:
+                break
+        return result
+
     def _test_success(self,
                       session: Session,
                       **kwargs):
@@ -60,7 +68,8 @@ class BaseDataModelTestCase(BaseTestCase):
         return result
 
     def _test_unique_constraint(self, session: Session,
-                                ex_message: str = "duplicate key value violates unique constraint",
+                                ex_message: list = ["UNIQUE constraint failed:",
+                                                    "duplicate key value violates unique constraint"],
                                 **kwargs):
         try:
             result1 = self._model(**kwargs)
@@ -69,7 +78,7 @@ class BaseDataModelTestCase(BaseTestCase):
             session.add(result2)
             session.commit()
         except Exception as ex:
-            self.assertIn(ex_message, str(ex))
+            self.assertTrue(self._check_exception(ex, ex_message))
             session.rollback()
             return
         if ex_message:
@@ -77,7 +86,7 @@ class BaseDataModelTestCase(BaseTestCase):
 
     def _test_not_null_constraint(self,
                                   session: Session,
-                                  ex_message: str = "violates not-null constraint",
+                                  ex_message: list = ["NOT NULL constraint failed:", "violates not-null constraint"],
                                   **kwargs):
         self._test_check_constraint(session=session,
                                     ex_message=ex_message,
@@ -85,14 +94,14 @@ class BaseDataModelTestCase(BaseTestCase):
 
     def _test_check_constraint(self,
                                session: Session,
-                               ex_message: str = "violates check constraint",
+                               ex_message: list = "violates check constraint",
                                **kwargs):
         try:
             result = self._model(**kwargs)
             session.add(result)
             session.commit()
         except Exception as ex:
-            self.assertIn(ex_message, str(ex))
+            self.assertTrue(self._check_exception(ex, ex_message))
             session.rollback()
             return
         if ex_message:

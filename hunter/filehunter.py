@@ -43,6 +43,7 @@ from hunters.modules.smb import SmbSensitiveFileHunter
 from hunters.modules.ftp import FtpSensitiveFileHunter
 from hunters.modules.nfs import NfsSensitiveFileHunter
 from hunters.modules.local import LocalSensitiveFileHunter
+from config.config import DatabaseType
 from config.config import FileHunter as FileHunterConfig
 
 logger = logging.getLogger("main")
@@ -79,10 +80,12 @@ if __name__ == "__main__":
     parser_database.add_argument("--backup", metavar="FILE", type=str, help="writes database backup to FILE")
     parser_database.add_argument("--restore", metavar="FILE", type=str, help="restores database backup from FILE")
     parser_database.add_argument("--setup",
-                                 action="store_true",
+                                 type=str,
+                                 choices=[item.name for item in DatabaseType],
                                  help="run initial setup for filehunter")
     parser_database.add_argument("--setup-dbg",
-                                 action="store_true",
+                                 type=str,
+                                 choices=[item.name for item in DatabaseType],
                                  help="like --setup but just prints commands for initial setup for filehunter")
     # setup console parser
     parser_review.add_argument('-w', '--workspace', type=str, help='the workspace used for the enumeration')
@@ -214,20 +217,22 @@ if __name__ == "__main__":
                     analyzer.start()
                 hunter = enumeration_class(args, engine=engine, file_queue=file_queue, config=config, temp_dir=temp_dir)
                 hunter.enumerate()
-                logger.info("consumer thread finished enumeration. current queue "
-                            "size: {:>2d}".format(file_queue.qsize()))
+                if args.debug:
+                    logger.info("consumer thread finished enumeration. current queue "
+                                "size: {:>2d}".format(file_queue.qsize()))
                 file_queue.join()
-                # print statistics
-                for item in analyzers:
-                    logger.info("completed consumer " + str(item))
-                with engine.session_scope() as session:
-                    service = session.query(Service) \
-                        .join(Host) \
-                        .join(Workspace) \
-                        .filter(Workspace.name == args.workspace,
-                                Host.address == hunter.address,
-                                Service.port == hunter.port).one()
-                    service.complete = True
+                if args.debug:
+                    # print statistics
+                    for item in analyzers:
+                        logger.info("completed consumer " + str(item))
+                    with engine.session_scope() as session:
+                        service = session.query(Service) \
+                            .join(Host) \
+                            .join(Workspace) \
+                            .filter(Workspace.name == args.workspace,
+                                    Host.address == hunter.address,
+                                    Service.port == hunter.port).one()
+                        service.complete = True
     except WorkspaceNotFound as ex:
         print(str(ex), file=sys.stderr)
     except Exception as ex:
