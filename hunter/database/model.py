@@ -154,7 +154,7 @@ class Service(DeclarativeBase):
         if self.host:
             if self.name == HunterType.smb:
                 result = "//{}".format(self.host.address)
-            else:
+            elif self.name != HunterType.local:
                 result = "{}://{}".format(self.name.name, self.host.address)
             if self.port and (self.name == HunterType.smb and self.port != 445 or
                               self.name == HunterType.ftp and self.port != 21 or
@@ -297,6 +297,7 @@ class File(DeclarativeBase):
         result.append("{}         {}".format(print_bold("Paths"),
                                               "; ".join([str(item) for item in self.paths])))
         result.append("{}     {}".format(print_bold("MIME type"), self.mime_type))
+        result.append("{}     {}".format(print_bold("File size"), self.size_bytes))
         result.append(print_bold("Match rules"))
         for item in self.matches:
             result.append("- {}".format(item.get_text(color)))

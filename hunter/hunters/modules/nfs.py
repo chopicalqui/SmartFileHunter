@@ -76,8 +76,8 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                         path.file = File(content=bytes(content))
                         logger.debug("enqueue file: {}".format(str(path)))
                         self.file_queue.put(path)
-                    else:
-                        path.file = File(content="[file ({}) not imported as file size ({})"
+                    elif file_size > 0:
+                        path.file = File(content="[file ({}) not imported as file size ({}) "
                                                  "is above threshold]".format(str(path), file_size).encode('utf-8'))
                         path.file.size_bytes = file_size
                         self._analyze_path_name(path)

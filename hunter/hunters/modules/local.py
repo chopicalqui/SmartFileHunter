@@ -66,8 +66,8 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
                         path.file = File(content=content)
                         logger.debug("enqueue file: {}".format(path.full_path))
                         self.file_queue.put(path)
-                    else:
-                        path.file = File(content="[file ({}) not imported as file size ({})"
+                    elif stats.st_size > 0:
+                        path.file = File(content="[file ({}) not imported as file size ({}) "
                                                  "is above threshold]".format(str(path), stats.st_size).encode('utf-8'))
                         path.file.size_bytes = stats.st_size
                         self._analyze_path_name(path)

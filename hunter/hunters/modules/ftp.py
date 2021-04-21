@@ -99,8 +99,8 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
                         except ftplib.error_perm:
                             # Catch permission exception, if FTP user does not have read permission on a certain file
                             logger.error("cannot read file: {}".format(str(path)), exc_info=self._args.verbose)
-                    else:
-                        path.file = File(content="[file ({}) not imported as file size ({})"
+                    elif file_size > 0:
+                        path.file = File(content="[file ({}) not imported as file size ({}) "
                                                  "is above threshold]".format(str(path), file_size).encode('utf-8'))
                         path.file.size_bytes = file_size
                         self._analyze_path_name(path)
