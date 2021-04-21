@@ -70,11 +70,6 @@ class ReviewResult(enum.Enum):
     tbd = enum.auto()
 
 
-class ImportAction(enum.Enum):
-    full_import = enum.auto()
-    path_only = enum.auto()
-
-
 class FileRelevance(enum.Enum):
     low = 100
     medium = 80
@@ -417,12 +412,10 @@ class MatchRule(DeclarativeBase):
         relevance = FileRelevance[json_object["relevance"]]
         accuracy = MatchRuleAccuracy[json_object["accuracy"]]
         search_pattern = json_object["search_pattern"]
-        action = ImportAction[json_object["action"]]
         rule = MatchRule(search_location=search_location,
                          category=category,
                          relevance=relevance,
                          search_pattern=search_pattern,
-                         action=action,
                          accuracy=accuracy)
         return rule
 

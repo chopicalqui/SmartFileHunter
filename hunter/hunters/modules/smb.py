@@ -36,9 +36,8 @@ from impacket.smbconnection import SMB_DIALECT
 from impacket.smbconnection import SMB2_DIALECT_002
 from impacket.smbconnection import SMB2_DIALECT_21
 from impacket.smbconnection import SMBConnection
-from impacket.smbconnection import SessionError
 from impacket.smbconnection import FILE_SHARE_READ
-from hunters.core import BaseSensitiveFileHunter
+from hunters.modules.core import BaseSensitiveFileHunter
 
 logger = logging.getLogger('smb')
 
@@ -137,22 +136,26 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                 full_path = os.path.join(directory, filename)
                 if is_directory:
                     self.__enumerate(share, os.path.join(directory, filename))
-                elif self.is_file_size_below_threshold(file_size):
+                else:
                     path = Path(service=self.service,
                                 full_path=full_path,
                                 share=share,
                                 access_time=datetime.datetime.utcfromtimestamp(item.get_atime_epoch()),
                                 modified_time=datetime.datetime.utcfromtimestamp(item.get_mtime_epoch()),
                                 creation_time=datetime.datetime.utcfromtimestamp(item.get_ctime_epoch()))
-                    # Obtain file content
-                    with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
-                        with open(temp.name, "wb") as file:
-                            self.client.getFile(share, full_path, file.write, FILE_SHARE_READ)
-                        with open(temp.name, "rb") as file:
-                            content = file.read()
-                    path.file = File(content=content)
-                    # Add file to queue
-                    logger.debug("enqueue file: {}".format(str(path)))
-                    self.file_queue.put(path)
-                else:
-                    logger.debug("skip file: {}".format(full_path))
+                    if self.is_file_size_below_threshold(file_size):
+                        # Obtain file content
+                        with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
+                            with open(temp.name, "wb") as file:
+                                self.client.getFile(share, full_path, file.write, FILE_SHARE_READ)
+                            with open(temp.name, "rb") as file:
+                                content = file.read()
+                        path.file = File(content=content)
+                        # Add file to queue
+                        logger.debug("enqueue file: {}".format(str(path)))
+                        self.file_queue.put(path)
+                    else:
+                        path.file = File(content="[file ({}) not imported as file size ({})"
+                                                 "is above threshold]".format(str(path), file_size).encode('utf-8'))
+                        path.file.size_bytes = file_size
+                        self._analyze_path_name(path)

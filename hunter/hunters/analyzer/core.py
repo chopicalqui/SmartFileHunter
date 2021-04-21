@@ -26,44 +26,24 @@ import os
 import glob
 import logging
 import tempfile
-import argparse
-from queue import Queue
 from datetime import datetime
 from datetime import timezone
-from threading import Lock
 from pyunpack import Archive
-from threading import Thread
-from database.core import Engine
+from hunters.core import BaseAnalyzer
 from database.model import Path
 from database.model import File
-from database.model import MatchRule
-from database.model import SearchLocation
-from database.model import FileRelevance
-from config.config import FileHunter as FileHunterConfig
 
 logger = logging.getLogger('analyzer')
 
-mutex = Lock()
 
-
-class FileAnalzer(Thread):
+class FileAnalzer(BaseAnalyzer):
     """
     This class is responsible for analysing a given file.
     """
     ID = 0
 
-    def __init__(self,
-                 args: argparse.Namespace,
-                 engine: Engine,
-                 file_queue: Queue,
-                 config: FileHunterConfig,
-                 **kwargs):
-        super().__init__(daemon=True)
-        self._args = args
-        self.workspace = args.workspace
-        self.engine = engine
-        self.config = config
-        self.file_queue = file_queue
+    def __init__(self, **kwargs):
+        super().__init__(daemon=True, **kwargs)
         FileAnalzer.ID += 1
         self._id = FileAnalzer.ID
         self._number_of_processed_files = 0
@@ -87,96 +67,6 @@ class FileAnalzer(Thread):
                "files processed (failed): {:>5d}".format(self._id,
                                                          self._number_of_processed_files,
                                                          self._number_of_failed_files)
-
-    def add_content(self, path: Path, rule: MatchRule = None, file: File = None):
-        if rule and file:
-            raise ValueError("parameters rule and file are mutual exclusive")
-        elif not rule and not file:
-            raise ValueError("either parameter rule or file must be given")
-        with mutex:
-            with self.engine.session_scope() as session:
-                workspace = self.engine.get_workspace(session, name=self.workspace)
-                host = self.engine.add_host(session=session,
-                                            workspace=workspace,
-                                            address=path.service.host.address)
-                service = self.engine.add_service(session=session,
-                                                  port=path.service.port,
-                                                  name=path.service.name,
-                                                  host=host)
-                if rule:
-                    match_file = self.engine.add_match_rule(session=session,
-                                                            search_location=rule.search_location,
-                                                            search_pattern=rule.search_pattern,
-                                                            relevance=rule.relevance,
-                                                            accuracy=rule.accuracy,
-                                                            category=rule.category)
-                    file = self.engine.add_file(session=session,
-                                                workspace=workspace,
-                                                file=path.file)
-                    file.add_match_rule(match_file)
-                self.engine.add_path(session=session,
-                                     service=service,
-                                     full_path=path.full_path,
-                                     share=path.share,
-                                     file=file,
-                                     access_time=path.access_time,
-                                     modified_time=path.modified_time,
-                                     creation_time=path.creation_time)
-
-    def _analyze_content(self, path: Path) -> FileRelevance:
-        """
-        This method analyzes the file's content for interesting information.
-        :param path: The path object whose content shall be analyzed.
-        :return: True if file is of relevance
-        """
-        result = None
-        for rule in self.config.matching_rules[SearchLocation.file_content.name]:
-            if rule.is_match(path):
-                logger.info("Match: {} ({})".format(str(path), rule.get_text(not self._args.nocolor)))
-                result = rule.relevance
-                self.add_content(path=path, rule=rule)
-                break
-        return result
-
-    def _analyze_path_name(self, path: Path) -> FileRelevance:
-        """
-        This method analyzes the file's name for interesting information.
-        :param path: The path object whose name shall be analyzed.
-        :return: True if file is of relevance
-        """
-        result = None
-        for rule in self.config.matching_rules[SearchLocation.file_name.name]:
-            if rule.is_match(path):
-                logger.info("Match: {} ({})".format(str(path), rule.get_text(not self._args.nocolor)))
-                result = rule.relevance
-                self.add_content(rule=rule, path=path)
-                break
-        return result
-
-    def _extract_archive(self, path: Path):
-        """
-        This method extracts and analyses the given archive file.
-        """
-        with tempfile.NamedTemporaryFile() as file_name:
-            with open(file_name.name, "wb") as file:
-                file.write(path.file.content)
-            with tempfile.TemporaryDirectory() as dir_name:
-                Archive(file_name.name).extractall(dir_name)
-                for item in glob.glob(dir_name + "/**", recursive=True):
-                    stats = os.stat(item)
-                    if os.path.isfile(item):
-                        full_path = item.replace(dir_name, path.full_path, 1)
-                        with open(item, "rb") as file:
-                            content = file.read()
-                        tmp = Path(service=path.service,
-                                   full_path=full_path,
-                                   access_time=datetime.fromtimestamp(stats.st_atime, tz=timezone.utc),
-                                   modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
-                                   creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc),
-                                   file=File(content=content))
-                        self.analyze(tmp)
-                    elif os.path.isfile(item):
-                        logger.debug("skip file: {}".format(item))
 
     def analyze(self, path: Path) -> None:
         """
@@ -211,3 +101,27 @@ class FileAnalzer(Thread):
                 if not result:
                     self._analyze_path_name(path)
 
+    def _extract_archive(self, path: Path):
+        """
+        This method extracts and analyses the given archive file.
+        """
+        with tempfile.NamedTemporaryFile() as file_name:
+            with open(file_name.name, "wb") as file:
+                file.write(path.file.content)
+            with tempfile.TemporaryDirectory() as dir_name:
+                Archive(file_name.name).extractall(dir_name)
+                for item in glob.glob(dir_name + "/**", recursive=True):
+                    stats = os.stat(item)
+                    if os.path.isfile(item):
+                        full_path = item.replace(dir_name, path.full_path, 1)
+                        with open(item, "rb") as file:
+                            content = file.read()
+                        tmp = Path(service=path.service,
+                                   full_path=full_path,
+                                   access_time=datetime.fromtimestamp(stats.st_atime, tz=timezone.utc),
+                                   modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+                                   creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc),
+                                   file=File(content=content))
+                        self.analyze(tmp)
+                    elif os.path.isfile(item):
+                        logger.debug("skip file: {}".format(item))

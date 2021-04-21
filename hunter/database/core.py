@@ -334,14 +334,12 @@ class Engine:
     @staticmethod
     def add_file(session: Session,
                  workspace: Workspace,
-                 file: File,
-                 import_action: ImportAction = ImportAction.full_import) -> File:
+                 file: File) -> File:
         """
         This method should be used to add a file to the database
         :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
         :param workspace: The workspace to which the network shall be added
         :param file: The file object that shall be added
-        :param add_content: True if the file's content shall be added to the database
         :return: Database object
         """
         result = Engine.get_file(session=session, workspace=workspace, sha256_value=file.sha256_value)
@@ -354,22 +352,6 @@ class Engine:
                           mime_type=file.mime_type)
             session.add(result)
             session.flush()
-        else:
-            updated = False
-            if import_action.full_import:
-                if not result.content and file.content:
-                    updated = True
-                    result.content = file.content
-            else:
-                updated = True
-                result.file_type = file.file_type
-                result.mime_type = file.mime_type
-                result.size_bytes = file.size_bytes
-            if result.review_result != file.review_result and file.review_result:
-                updated = True
-                result.review_result = file.review_result
-            if updated:
-                session.flush()
         return result
 
     @staticmethod

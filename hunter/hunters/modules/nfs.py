@@ -32,7 +32,7 @@ from datetime import timezone
 from database.model import Path
 from database.model import File
 from database.model import HunterType
-from hunters.core import BaseSensitiveFileHunter
+from hunters.modules.core import BaseSensitiveFileHunter
 
 logger = logging.getLogger('nfs')
 
@@ -65,15 +65,19 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                 file_size = stats['size']
                 if stat.S_ISDIR(stats['mode']):
                     self._enumerate(full_path)
-                elif self.is_file_size_below_threshold(file_size):
+                else:
                     path = Path(service=self.service,
                                 full_path=full_path,
                                 access_time=datetime.fromtimestamp(stats['atime']['sec'], tz=timezone.utc),
                                 modified_time=datetime.fromtimestamp(stats['mtime']['sec'], tz=timezone.utc),
                                 creation_time=datetime.fromtimestamp(stats['ctime']['sec'], tz=timezone.utc))
-                    content = self.client.open(full_path, mode='rb').read()
-                    path.file = File(content=bytes(content))
-                    logger.debug("enqueue file: {}".format(str(path)))
-                    self.file_queue.put(path)
-                else:
-                    logger.debug("skip file: {}".format(full_path))
+                    if self.is_file_size_below_threshold(file_size):
+                        content = self.client.open(full_path, mode='rb').read()
+                        path.file = File(content=bytes(content))
+                        logger.debug("enqueue file: {}".format(str(path)))
+                        self.file_queue.put(path)
+                    else:
+                        path.file = File(content="[file ({}) not imported as file size ({})"
+                                                 "is above threshold]".format(str(path), file_size).encode('utf-8'))
+                        path.file.size_bytes = file_size
+                        self._analyze_path_name(path)

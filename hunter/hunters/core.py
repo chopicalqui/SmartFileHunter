@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-this file implements the core functionality to hunt for any sensitive files.
+this file implements the core functionality for collectors and analyzers
 """
 
 __author__ = "Lukas Reiter"
@@ -22,92 +22,103 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
-import argparse
 import logging
+import argparse
 from queue import Queue
+from threading import Lock
+from threading import Thread
 from database.core import Engine
-from database.model import Host
-from database.model import Service
-from database.model import Workspace
-from database.model import HunterType
+from database.model import Path
+from database.model import File
+from database.model import MatchRule
+from database.model import SearchLocation
+from database.model import FileRelevance
 from config.config import FileHunter as FileHunterConfig
 
-logger = logging.getLogger('smb')
+logger = logging.getLogger('analyzer')
 
 
-class BaseSensitiveFileHunter:
+class BaseAnalyzer(Thread):
     """
-    This class implements the core functionality to hunt for files.
+    This class implements all base functionalities for collectors and analyzers
     """
+
+    DB_OPERATION_MUTEX = Lock()
 
     def __init__(self,
-                 args: argparse.Namespace,
-                 file_queue: Queue,
-                 temp_dir: str,
-                 config: FileHunterConfig,
-                 address: str,
-                 service_name: HunterType,
                  engine: Engine,
-                 port: int = None,
-                 **kwargs):
-        self.client = None
-        self.service = Service(port=port, name=service_name)
-        self.service.host = Host(address=address)
-        self.service.workspace = Workspace(name=args.workspace)
-        self.verbose = args.verbose
-        self.reanalyze = args.reanalyze
-        self.config = config
-        self.port = port
-        self.address = address
-        self.temp_dir = temp_dir
+                 args: argparse.Namespace,
+                 config: FileHunterConfig,
+                 file_queue: Queue,
+                 daemon: bool = False):
+        super().__init__(daemon=daemon)
+        self.engine = engine
         self.file_queue = file_queue
-        self._engine = engine
         self._args = args
-        self.file_size_threshold = self.config.config["general"].getint("max_file_size_bytes")
-        # we add the current host and service to the database so that the consumer threads can use them
-        with engine.session_scope() as session:
-            workspace = engine.get_workspace(session, name=args.workspace)
-            host = engine.add_host(session=session,
-                                   workspace=workspace,
-                                   address=address)
-            engine.add_service(session=session,
-                               port=port,
-                               name=service_name,
-                               host=host)
-            for match_rules in self.config.matching_rules.values():
-                for match_rule in match_rules:
-                    engine.add_match_rule(session=session,
-                                          search_location=match_rule.search_location,
-                                          search_pattern=match_rule.search_pattern,
-                                          relevance=match_rule.relevance,
-                                          accuracy=match_rule.accuracy,
-                                          category=match_rule.category)
+        self.workspace = args.workspace
+        self.config = config
 
-    def is_file_size_below_threshold(self, size: int) -> bool:
-        return size > 0 and (self.file_size_threshold <= 0 or size <= self.file_size_threshold)
+    def add_content(self, path: Path, rule: MatchRule = None, file: File = None):
+        if rule and file:
+            raise ValueError("parameters rule and file are mutual exclusive")
+        elif not rule and not file:
+            raise ValueError("either parameter rule or file must be given")
+        with BaseAnalyzer.DB_OPERATION_MUTEX:
+            with self.engine.session_scope() as session:
+                workspace = self.engine.get_workspace(session, name=self.workspace)
+                host = self.engine.add_host(session=session,
+                                            workspace=workspace,
+                                            address=path.service.host.address)
+                service = self.engine.add_service(session=session,
+                                                  port=path.service.port,
+                                                  name=path.service.name,
+                                                  host=host)
+                if rule:
+                    match_file = self.engine.add_match_rule(session=session,
+                                                            search_location=rule.search_location,
+                                                            search_pattern=rule.search_pattern,
+                                                            relevance=rule.relevance,
+                                                            accuracy=rule.accuracy,
+                                                            category=rule.category)
+                    file = self.engine.add_file(session=session,
+                                                workspace=workspace,
+                                                file=path.file)
+                    file.add_match_rule(match_file)
+                self.engine.add_path(session=session,
+                                     service=service,
+                                     full_path=path.full_path,
+                                     share=path.share,
+                                     file=file,
+                                     access_time=path.access_time,
+                                     modified_time=path.modified_time,
+                                     creation_time=path.creation_time)
 
-    def enumerate(self):
+    def _analyze_content(self, path: Path) -> FileRelevance:
         """
-        This method enumerates all files on the given service.
-        :return:
+        This method analyzes the file's content for interesting information.
+        :param path: The path object whose content shall be analyzed.
+        :return: True if file is of relevance
         """
-        # Determine if service was analyzed before
-        with self._engine.session_scope() as session:
-            service = session.query(Service) \
-                .join(Host) \
-                .join(Workspace) \
-                .filter(Workspace.name == self.service.workspace.name,
-                        Host.address == self.address,
-                        Service.port == self.port).one()
-            complete = service.complete
-        if not complete or self.reanalyze:
-            self._enumerate()
-        else:
-            logger.info("skipping service as it was already analyzed")
+        result = None
+        for rule in self.config.matching_rules[SearchLocation.file_content.name]:
+            if rule.is_match(path):
+                logger.info("Match: {} ({})".format(str(path), rule.get_text(not self._args.nocolor)))
+                result = rule.relevance
+                self.add_content(path=path, rule=rule)
+                break
+        return result
 
-    def _enumerate(self):
+    def _analyze_path_name(self, path: Path) -> FileRelevance:
         """
-        This method enumerates all files on the given service.
-        :return:
+        This method analyzes the file's name for interesting information.
+        :param path: The path object whose name shall be analyzed.
+        :return: True if file is of relevance
         """
-        raise NotImplementedError("this method must be implemented by all subclasses")
+        result = None
+        for rule in self.config.matching_rules[SearchLocation.file_name.name]:
+            if rule.is_match(path):
+                logger.info("Match: {} ({})".format(str(path), rule.get_text(not self._args.nocolor)))
+                result = rule.relevance
+                self.add_content(rule=rule, path=path)
+                break
+        return result

@@ -31,7 +31,7 @@ from datetime import timezone
 from database.model import Path
 from database.model import File
 from database.model import HunterType
-from hunters.core import BaseSensitiveFileHunter
+from hunters.modules.core import BaseSensitiveFileHunter
 
 logger = logging.getLogger('nfs')
 
@@ -54,16 +54,20 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
             path = path if path[-1] == "/" else path + "/"
             for item in glob.iglob(path + "**", recursive=True):
                 stats = os.stat(item)
-                if os.path.isfile(item) and self.is_file_size_below_threshold(stats.st_size):
+                if os.path.isfile(item):
                     path = Path(service=self.service,
                                 full_path=item,
                                 access_time=datetime.fromtimestamp(stats.st_atime, tz=timezone.utc),
                                 modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
                                 creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc))
-                    with open(item, "rb") as file:
-                        content = file.read()
-                    path.file = File(content=content)
-                    logger.debug("enqueue file: {}".format(path.full_path))
-                    self.file_queue.put(path)
-                elif os.path.isfile(item):
-                    logger.debug("skip file: {}".format(item))
+                    if self.is_file_size_below_threshold(stats.st_size):
+                        with open(item, "rb") as file:
+                            content = file.read()
+                        path.file = File(content=content)
+                        logger.debug("enqueue file: {}".format(path.full_path))
+                        self.file_queue.put(path)
+                    else:
+                        path.file = File(content="[file ({}) not imported as file size ({})"
+                                                 "is above threshold]".format(str(path), stats.st_size).encode('utf-8'))
+                        path.file.size_bytes = stats.st_size
+                        self._analyze_path_name(path)
