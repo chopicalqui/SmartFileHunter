@@ -149,7 +149,7 @@ class TestService(BaseDataModelTestCase):
     def test_repr_with_host_without_port(self):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.local, host=host)
-        self.assertEqual("local://127.0.0.1", str(service))
+        self.assertEqual("", str(service))
 
 
 class TestFile(BaseDataModelTestCase):
