@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument("--nocolor", action='store_true', help="disable color coding")
     parser.add_argument("-d", "--debug", action='store_true', help="print debug messages to standard output")
     parser.add_argument("-v", "--verbose", action='store_true', help="print additional information (e.g., stack traces "
-                                                                     "or banner information")
+                                                                     "or banner information)")
     parser.add_argument("--log", metavar="FILE", type=str, help="log messages to the given file")
     sub_parser = parser.add_subparsers(help='list of available file hunter modules', dest="module")
     parser_database = sub_parser.add_parser('db', help='allows setting up and managing the database')

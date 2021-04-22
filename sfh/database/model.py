@@ -24,9 +24,9 @@ __version__ = 0.1
 
 import os
 import re
-import hashlib
-import magic
 import enum
+import magic
+import hashlib
 import logging
 import hexdump
 from sqlalchemy import Column
