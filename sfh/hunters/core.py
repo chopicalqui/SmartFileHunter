@@ -58,7 +58,16 @@ class BaseAnalyzer(Thread):
         self.workspace = args.workspace
         self.config = config
 
+    def is_file_size_below_threshold(self, size: int) -> bool:
+        """
+        This method determines if the given file size in bytes is below the configured threshold.
+        """
+        return size > 0 and (self.config.threshold <= 0 or size <= self.config.threshold)
+
     def add_content(self, path: Path, rule: MatchRule = None, file: File = None):
+        """
+        This method adds the rule matching result to the database.
+        """
         if rule and file:
             raise ValueError("parameters rule and file are mutual exclusive")
         elif not rule and not file:

@@ -61,11 +61,15 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
                                 modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
                                 creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc))
                     if self.is_file_size_below_threshold(stats.st_size):
-                        with open(item, "rb") as file:
-                            content = file.read()
-                        path.file = File(content=content)
-                        logger.debug("enqueue file: {}".format(path.full_path))
-                        self.file_queue.put(path)
+                        try:
+                            with open(item, "rb") as file:
+                                content = file.read()
+                            path.file = File(content=content)
+                            logger.debug("enqueue file: {}".format(path.full_path))
+                            self.file_queue.put(path)
+                        except PermissionError:
+                            # Catch permission exception, if FTP user does not have read permission on a certain file
+                            logger.error("cannot read file: {}".format(str(path)), exc_info=self._args.verbose)
                     elif stats.st_size > 0:
                         path.file = File(content="[file ({}) not imported as file size ({}) "
                                                  "is above threshold]".format(str(path), stats.st_size).encode('utf-8'))

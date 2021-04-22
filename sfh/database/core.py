@@ -477,6 +477,10 @@ class ManageDatabase:
                                                             "grant all privileges on database {} to {}"
                                                    .format(database, self._db_config.username)],
                                                    return_code=0))
+        elif not os.path.isdir(self._hunter_config.get_home_dir()):
+            setup_commands.append(SetupCommand(description="create ~/.sfh directory for SQLite database",
+                                               command=["mkdir", self._hunter_config.get_home_dir()],
+                                               return_code=0))
         setup_commands.append(SetupCommand(description="creating the tables, triggers, views, etc.",
                                            command=["filehunter", "db", "--drop", "--init"]))
         if self._hunter_config.kali_packages:

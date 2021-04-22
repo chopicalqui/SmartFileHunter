@@ -123,7 +123,8 @@ if __name__ == "__main__":
                                           metavar="DOMAIN", help='the domain to use for authentication')
     parser_smb_credential_group = smb_authentication_group.add_mutually_exclusive_group()
     parser_smb_credential_group.add_argument('--hash', action="store",
-                                             metavar="LMHASH:NTHASH", help='NTLM hashes, format is LMHASH:NTHASH')
+                                             metavar="LMHASH:NTHASH", help='NTLM hashes, valid formats are'
+                                                                           'LMHASH:NTHASH or NTHASH')
     parser_smb_credential_group.add_argument('-p', '--password', action="store",
                                              metavar="PASSWORD", help='password of given user')
     parser_smb_credential_group.add_argument('-P', dest="prompt_for_password", action="store_true",

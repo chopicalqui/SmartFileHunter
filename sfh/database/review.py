@@ -25,6 +25,7 @@ import sys
 import enum
 import argparse
 from cmd import Cmd
+from config.config import FileHunter as FileHunterConfig
 from database.core import Engine
 from database.model import File
 from database.model import MatchRule
@@ -67,6 +68,7 @@ class ReviewConsole(Cmd):
         self._environment = None
         self._engine = Engine()
         self._file_ids = []
+        self._config = FileHunterConfig()
         if args.workspace:
             self._options[ConsoleOption.workspace] = args.workspace
         self._options[ConsoleOption.filter] = "File.review_result IS NULL OR File.review_result = 'tbd'"
@@ -101,6 +103,7 @@ class ReviewConsole(Cmd):
                 .distinct()
                 .order_by(desc(MatchRule.relevance), desc(MatchRule.accuracy), asc(Path.extension))]
         self._cursor_id = 0
+        self._update_prompt_text()
 
     def _update_view(self):
         """
@@ -112,7 +115,9 @@ class ReviewConsole(Cmd):
                 file = session.query(File).filter_by(id=id).one_or_none()
                 rules = session.query(MatchRule).filter_by(search_location=SearchLocation.file_content)
                 if file:
-                    result = file.get_text(color=not self._args.nocolor, match_rules=rules)
+                    result = file.get_text(color=not self._args.nocolor,
+                                           match_rules=rules,
+                                           threshold=self._config.threshold)
                     self._update_prompt_text()
             if sys.platform == "windows":
                 os.system("cls")
@@ -178,14 +183,17 @@ class ReviewConsole(Cmd):
         Set file relevant
         """
         if input:
-            id = self._file_ids[self._cursor_id - 1]
-            with self._engine.session_scope() as session:
-                file_object = session.query(File).filter_by(id=id).one_or_none()
-                if file_object:
-                    with open(input, "wb") as file:
-                        file.write(file_object.content)
-                else:
-                    print("file not found")
+            try:
+                id = self._file_ids[self._cursor_id - 1]
+                with self._engine.session_scope() as session:
+                    file_object = session.query(File).filter_by(id=id).one_or_none()
+                    if file_object:
+                        with open(input, "wb") as file:
+                            file.write(file_object.content)
+                    else:
+                        print("file not found")
+            except Exception as ex:
+                pass
 
     def help_export(self):
         print('export the current file to the given file (e.g., export /tmp/file.txt)')
@@ -206,11 +214,15 @@ class ReviewConsole(Cmd):
     def help_comment(self):
         print('add a review comment to the current file')
 
-    def do_stats(self, input: str):
+    def do_refresh(self, input: str):
         """
-        Print stats about the identified files
+        Load current results into memory
         """
-        pass
+        self._update_file_list()
+        self.do_n(input)
+
+    def help_refresh(self):
+        print('update view by loading current results from database into memory for review')
 
     def do_set(self, input: str):
         """
@@ -254,7 +266,8 @@ class ReviewConsole(Cmd):
                 print(ex)
                 self._options[option] = previous_value
                 return
-        self._update_prompt_text()
+        elif option == ConsoleOption.workspace:
+            self._update_file_list()
 
     def help_set(self):
         print("""Usage: set [option] [value]

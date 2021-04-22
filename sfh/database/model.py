@@ -271,7 +271,7 @@ class File(DeclarativeBase):
         """
         return hashlib.sha256(content).hexdigest()
 
-    def get_text(self, color: bool = False, match_rules = []) -> List[str]:
+    def get_text(self, color: bool = False, match_rules = [], threshold: int = 0) -> List[str]:
         """
         This method returns the details about the review.
         """
@@ -295,9 +295,14 @@ class File(DeclarativeBase):
         result.append("")
         result.append("{}       {}".format(print_bold("File ID"), self.id))
         result.append("{}         {}".format(print_bold("Paths"),
-                                              "; ".join([str(item) for item in self.paths])))
+                                             "; ".join([str(item) for item in self.paths])))
         result.append("{}     {}".format(print_bold("MIME type"), self.mime_type))
-        result.append("{}     {}".format(print_bold("File size"), self.size_bytes))
+        if threshold:
+            result.append("{}     {} ({})".format(print_bold("File size"),
+                                                  self.size_bytes,
+                                                  "<= threshold" if self.size_bytes < threshold else "> threshold"))
+        else:
+            result.append("{}     {}".format(print_bold("File size"), self.size_bytes))
         result.append(print_bold("Match rules"))
         for item in self.matches:
             result.append("- {}".format(item.get_text(color)))
@@ -453,22 +458,22 @@ class MatchRule(DeclarativeBase):
         print_bold = lambda x: colored(x, attrs=['bold']) if color else x
         if self.category:
             result = "{}: {}; {}: {}; {}: {}; {}: {}, {}: {}".format(print_bold("search location"),
+                                                                     self.search_location.name,
+                                                                     print_bold("pattern"),
+                                                                     self._search_pattern,
+                                                                     print_bold("category"),
+                                                                     self.category,
+                                                                     print_bold("relevance"),
+                                                                     relevance,
+                                                                     print_bold("accuracy"),
+                                                                     accuracy)
+        else:
+            result = "{}: {}; {}: {}; {}: {}, {}: {}".format(print_bold("search location"),
                                                              self.search_location.name,
                                                              print_bold("pattern"),
                                                              self._search_pattern,
-                                                             print_bold("category"),
-                                                             self.category,
                                                              print_bold("relevance"),
                                                              relevance,
                                                              print_bold("accuracy"),
                                                              accuracy)
-        else:
-            result = "{}: {}; {}: {}; {}: {}, {}: {}".format(print_bold("search location"),
-                                                     self.search_location.name,
-                                                     print_bold("pattern"),
-                                                     self._search_pattern,
-                                                     print_bold("relevance"),
-                                                     relevance,
-                                                     print_bold("accuracy"),
-                                                     accuracy)
         return result

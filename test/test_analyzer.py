@@ -87,7 +87,6 @@ PXJvb3QNCmpkYmMucGFzc3dvcmQ9YWRtaW4=""")
             results.sort()
             self.assertListEqual(['/SHARE$/it/backup.zip'], results)
 
-
     def test_recursive_zip_analysis(self):
         """
         Test recursive analysis of ZIP file
@@ -137,3 +136,33 @@ xNdpISDsXckU4UJDHGiRaA==""")
             results = [item.full_path for item in session.query(Path).all()]
             results.sort()
             self.assertListEqual(['/SHARE$/it/backup.tar.bz2/db.properties'], results)
+
+    def test_file_size_only_update(self):
+        """
+        If only the file size is stored in the database (without actual file content), then the file size should not
+        be updated
+        """
+        self.init_db()
+        workspace = self._workspaces[0]
+        file_size = 100000000
+        full_path = "/tmp/test.vmdk"
+        # Add workspace
+        with self._engine.session_scope() as session:
+            self._engine.add_workspace(session=session, name=workspace)
+        # Initialize analyzer and create workspace
+        analyzer = FileAnalzer(args=ArgumentHelper(workspace=workspace),
+                               engine=self._engine,
+                               file_queue=queue.Queue(),
+                               config=FileHunter())
+        path = Path(service=Service(name=HunterType.local,
+                                    host=Host(address="127.0.0.1")),
+                    full_path=full_path)
+        path.file = File(content="[file ({}) not imported as file size ({}) "
+                                 "is above threshold]".format(str(path), file_size).encode('utf-8'))
+        path.file.size_bytes = file_size
+        analyzer._analyze_path_name(path)
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(Path).one()
+            self.assertEqual(full_path, result.full_path)
+            self.assertEqual(file_size, result.file.size_bytes)

@@ -60,14 +60,19 @@ class BaseConfig:
     def get_config_int(self, section: str, name: str) -> int:
         return self.config[section].getint(name)
 
+    @staticmethod
+    def get_home_dir():
+        return os.path.join(os.path.expanduser("~"), ".sfh")
+
 
 class FileHunter(BaseConfig):
     """This class contains the ConfigParser object for the database"""
 
     def __init__(self):
-        super().__init__("hunters.config")
+        super().__init__("hunter.config")
         self.matching_rules = {}
         self.supported_archives = []
+        self.threshold = self.get_config_int("general", "max_file_size_bytes")
         self.kali_packages = json.loads(self.get_config_str("setup", "kali_packages"))
         self.scripts = json.loads(self.get_config_str("setup", "scripts"))
         for match_rule in json.loads(self.get_config_str("general", "match_rules")):
@@ -169,13 +174,21 @@ class DatabaseSqlite(BaseDatabase):
                          production_section="sqlite_production",
                          unittest_section="sqlite_unittesting")
 
+    def get_path(self, section_name: str):
+        database_name = self.get_config_str(section_name, "name")
+        if database_name and database_name[0] == "/":
+            result = database_name
+        else:
+            result = os.path.join(self.get_home_dir(), database_name)
+        return result
+
     @property
     def production_name(self) -> str:
-        return os.path.abspath(os.path.join(self._config_dir, "..", self.get_config_str(self._production_section, "name")))
+        return self.get_path(self._production_section)
 
     @property
     def test_name(self) -> str:
-        return os.path.abspath(os.path.join(self._config_dir, "..", self.get_config_str(self._unittest_section, "name")))
+        return self.get_path(self._unittest_section)
 
     @property
     def path(self) -> str:

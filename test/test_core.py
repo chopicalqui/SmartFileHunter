@@ -28,7 +28,7 @@ from config.config import FileHunter as FileHunterConfig
 
 class TestFileHunterConfig(unittest.TestCase):
     """
-    This method tests the correct load of file hunter configuratons
+    This method tests the correct load of file hunter configurations
     """
 
     def __init__(self, test_name: str):
@@ -37,7 +37,8 @@ class TestFileHunterConfig(unittest.TestCase):
 
     def test_match_rules_correctly_sorted(self):
         for rules in self._config.matching_rules.values():
-            priority = 10000
+            priority = None
             for rule in rules:
-                self.assertLessEqual(rule.priority, priority)
+                if priority:
+                    self.assertLessEqual(rule.priority, priority)
                 priority = rule.priority

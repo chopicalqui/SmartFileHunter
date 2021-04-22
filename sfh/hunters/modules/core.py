@@ -56,7 +56,6 @@ class BaseSensitiveFileHunter(BaseAnalyzer):
         self.address = address
         self.temp_dir = temp_dir
         self._args = args
-        self.file_size_threshold = self.config.config["general"].getint("max_file_size_bytes")
         # we add the current host and service to the database so that the consumer threads can use them
         with self.engine.session_scope() as session:
             workspace = self.engine.get_workspace(session, name=args.workspace)
@@ -75,9 +74,6 @@ class BaseSensitiveFileHunter(BaseAnalyzer):
                                                relevance=match_rule.relevance,
                                                accuracy=match_rule.accuracy,
                                                category=match_rule.category)
-
-    def is_file_size_below_threshold(self, size: int) -> bool:
-        return size > 0 and (self.file_size_threshold <= 0 or size <= self.file_size_threshold)
 
     def enumerate(self):
         """

@@ -22,10 +22,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
+import re
 import os
 import ntpath
 import getpass
 import logging
+import impacket
 import argparse
 import tempfile
 import datetime
@@ -60,18 +62,28 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             self.lm_hash = ''
             self.nt_hash = ''
         elif args.hash:
-            self.lm_hash, self.nt_hash = args.hash.split(':')
+            if ":" in args.hash:
+                self.lm_hash, self.nt_hash = args.hash.split(':')
+            else:
+                self.nt_hash = args.hash
+                self.lm_hash = 'aad3b435b51404eeaad3b435b51404ee'
+            self.password = ''
         elif args.prompt_for_password:
             self.password = getpass.getpass("password: ")
             self.lm_hash = ''
             self.nt_hash = ''
         elif args.prompt_for_hash:
-            self.nt_hash = getpass.getpass("NTLM hash: ")
-            self.lm_hash = ''
+            self.nt_hash = getpass.getpass("NT hash: ")
+            self.password = ''
+            self.lm_hash = 'aad3b435b51404eeaad3b435b51404ee'
         else:
             self.password = ''
             self.lm_hash = ''
             self.nt_hash = ''
+        if self.lm_hash and not re.search("^[0-9a-z]{32,32}$", self.lm_hash, re.IGNORECASE):
+            raise ValueError("invalid LM hash: {}".format(self.lm_hash))
+        if self.nt_hash and not re.search("^[0-9a-z]{32,32}$", self.nt_hash, re.IGNORECASE):
+            raise ValueError("invalid NT hash: {}".format(self.nt_hash))
         self.domain = args.domain
         self.client = SMBConnection(self.service.host.address, self.service.host.address, sess_port=self.service.port)
         self.client.login(self.username, self.password, self.domain, self.lm_hash, self.nt_hash)
@@ -127,35 +139,44 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                 logger.error("cannot access share: {}/{}".format(str(self.service), name), exc_info=self._args.verbose)
 
     def __enumerate(self, share: str, directory: str = "/") -> None:
-        items = self.client.listPath(share, self.pathify(directory))
-        for item in items:
-            file_size = item.get_filesize()
-            filename = item.get_longname()
-            is_directory = item.is_directory()
-            if filename not in ['.', '..']:
-                full_path = os.path.join(directory, filename)
-                if is_directory:
-                    self.__enumerate(share, os.path.join(directory, filename))
-                else:
-                    path = Path(service=self.service,
-                                full_path=full_path,
-                                share=share,
-                                access_time=datetime.datetime.utcfromtimestamp(item.get_atime_epoch()),
-                                modified_time=datetime.datetime.utcfromtimestamp(item.get_mtime_epoch()),
-                                creation_time=datetime.datetime.utcfromtimestamp(item.get_ctime_epoch()))
-                    if self.is_file_size_below_threshold(file_size):
-                        # Obtain file content
-                        with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
-                            with open(temp.name, "wb") as file:
-                                self.client.getFile(share, full_path, file.write, FILE_SHARE_READ)
-                            with open(temp.name, "rb") as file:
-                                content = file.read()
-                        path.file = File(content=content)
-                        # Add file to queue
-                        logger.debug("enqueue file: {}".format(str(path)))
-                        self.file_queue.put(path)
-                    elif file_size > 0:
-                        path.file = File(content="[file ({}) not imported as file size ({}) "
-                                                 "is above threshold]".format(str(path), file_size).encode('utf-8'))
-                        path.file.size_bytes = file_size
-                        self._analyze_path_name(path)
+        try:
+            items = self.client.listPath(share, self.pathify(directory))
+            for item in items:
+                file_size = item.get_filesize()
+                filename = item.get_longname()
+                is_directory = item.is_directory()
+                if filename not in ['.', '..']:
+                    full_path = os.path.join(directory, filename)
+                    if is_directory:
+                        self.__enumerate(share, os.path.join(directory, filename))
+                    else:
+                        path = Path(service=self.service,
+                                    full_path=full_path,
+                                    share=share,
+                                    access_time=datetime.datetime.utcfromtimestamp(item.get_atime_epoch()),
+                                    modified_time=datetime.datetime.utcfromtimestamp(item.get_mtime_epoch()),
+                                    creation_time=datetime.datetime.utcfromtimestamp(item.get_ctime_epoch()))
+                        if self.is_file_size_below_threshold(file_size):
+                            try:
+                                # Obtain file content
+                                with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
+                                    with open(temp.name, "wb") as file:
+                                        self.client.getFile(share, full_path, file.write, FILE_SHARE_READ)
+                                    with open(temp.name, "rb") as file:
+                                        content = file.read()
+                                path.file = File(content=content)
+                                # Add file to queue
+                                logger.debug("enqueue file: {}".format(str(path)))
+                                self.file_queue.put(path)
+                            except impacket.smbconnection.SessionError:
+                                # Catch permission exception, if SMB user does not have read permission on a certain file
+                                logger.error("cannot read file: {}".format(str(path)), exc_info=self._args.verbose)
+                        elif file_size > 0:
+                            path.file = File(content="[file ({}) not imported as file size ({}) "
+                                                     "is above threshold]".format(str(path), file_size).encode('utf-8'))
+                            path.file.size_bytes = file_size
+                            self._analyze_path_name(path)
+        except impacket.smbconnection.SessionError:
+            # Catch permission exception, if SMB user does not have read permission on a certain directory
+            logger.error("cannot access item: {}{}".format(str(self.service), str(directory)),
+                         exc_info=self._args.verbose)
