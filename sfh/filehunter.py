@@ -116,6 +116,11 @@ if __name__ == "__main__":
     parser_smb.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     parser_smb.add_argument('-t', '--threads', type=int, default=default_thread_count,
                             help='number of analysis threads')
+    parser_smb.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
+                            help='the name of the domain name of existing microsoft active directories. if specified, '
+                                 'then the specified values become additional file content matching rules with'
+                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
+                                 'user names in files.')
     smb_target_group = parser_smb.add_argument_group('target information')
     smb_target_group.add_argument('--host', type=str, metavar="HOST", help="the target SMB service's IP address")
     smb_target_group.add_argument('--port', type=int, default=445, metavar="PORT",
@@ -144,6 +149,11 @@ if __name__ == "__main__":
     parser_ftp.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     parser_ftp.add_argument('-t', '--threads', type=int, default=default_thread_count,
                             help='number of analysis threads')
+    parser_ftp.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
+                            help='the name of the domain name of existing microsoft active directories. if specified, '
+                                 'then the specified values become additional file content matching rules with'
+                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
+                                 'user names in files.')
     ftp_target_group = parser_ftp.add_argument_group('target information')
     ftp_target_group.add_argument('--host', type=str, metavar="HOST", help="the target FTP service's IP address")
     ftp_target_group.add_argument('--port', type=int, default=21, metavar="PORT",
@@ -162,6 +172,11 @@ if __name__ == "__main__":
     parser_nfs.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
     parser_nfs.add_argument('-t', '--threads', type=int, default=default_thread_count,
                             help='number of analysis threads')
+    parser_nfs.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
+                            help='the name of the domain name of existing microsoft active directories. if specified, '
+                                 'then the specified values become additional file content matching rules with'
+                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
+                                 'user names in files.')
     nfs_target_group = parser_nfs.add_argument_group('target information')
     nfs_target_group.add_argument('--host', type=str, metavar="HOST", help="the target NFS service's IP address")
     nfs_target_group.add_argument('--port', type=int, default=2049, metavar="PORT",
@@ -174,6 +189,11 @@ if __name__ == "__main__":
     parser_local.add_argument('-t', '--threads', type=int, default=default_thread_count,
                               help='number of analysis threads')
     parser_local.add_argument('path', nargs="+", help='directories to enumerate')
+    parser_local.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
+                              help='the name of the domain name of existing microsoft active directories. if specified, '
+                                   'then the specified values become additional file content matching rules with'
+                                   'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
+                                   'user names in files.')
     args = parser.parse_args()
     
     level = logging.DEBUG if args.debug else logging.INFO
@@ -222,7 +242,7 @@ if __name__ == "__main__":
             if enumeration_class:
                 analyzers = []
                 engine = Engine()
-                config = FileHunterConfig()
+                config = FileHunterConfig(domain_names=args.domains)
                 file_queue = Queue(maxsize=20)
                 DeclarativeBase.metadata.bind = engine.engine
                 # Check wheather name space exists

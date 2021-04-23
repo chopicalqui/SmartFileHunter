@@ -27,6 +27,9 @@ import json
 import logging
 import configparser
 from database.model import MatchRule
+from database.model import FileRelevance
+from database.model import SearchLocation
+from database.model import MatchRuleAccuracy
 
 logger = logging.getLogger("config")
 
@@ -72,7 +75,7 @@ class BaseConfig:
 class FileHunter(BaseConfig):
     """This class contains the ConfigParser object for the database"""
 
-    def __init__(self):
+    def __init__(self, domain_names: list = None):
         super().__init__("hunter.config")
         self.matching_rules = {}
         self.supported_archives = []
@@ -87,7 +90,15 @@ class FileHunter(BaseConfig):
                 self.matching_rules[rule.search_location.name].append(rule)
             except re.error:
                 logging.error("failed to compile regex: {}".format(match_rule["search_pattern"]))
-        # sort matching rules according to their priority
+        # Add Microsoft Active Directory domain names to search list
+        if domain_names:
+            for domain_name in domain_names:
+                match_rule = MatchRule(search_location=SearchLocation.file_content,
+                                       relevance=FileRelevance.medium,
+                                       accuracy=MatchRuleAccuracy.medium,
+                                       search_pattern="{}[\\\\/]\\w+".format(domain_name))
+                self.matching_rules[SearchLocation.file_content.name].append(match_rule)
+        # Sort matching rules according to their priority
         for key, value in self.matching_rules.items():
             self.matching_rules[key] = sorted(value, key=lambda rule: rule.priority, reverse=True)
         for item in json.loads(self.get_config_str("general", "supported_archives")):
