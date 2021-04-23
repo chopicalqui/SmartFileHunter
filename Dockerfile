@@ -5,11 +5,7 @@ ENV LC_ALL=C.UTF-8
 ENV PIP_NO_CACHE_DIR=off
 
 # Install applications
-RUN apt-get update -y && \
-    apt-get upgrade -y && \
-    apt-get dist-upgrade -y && \
-    apt-get -y autoremove && \
-    apt-get clean
+RUN apt-get update -y
 
 # Install nfslib
 RUN apt install -y wget cmake
@@ -27,11 +23,15 @@ RUN apt remove -y wget cmake && \
 
 # Install Smart File Hunter and its requirements
 RUN apt-get install -y python3-magic gcc zip unzip unrar-free p7zip-full
-WORKDIR /usr/src/smartfilehunter
+WORKDIR /opt/smartfilehunter
 COPY ./sfh .
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 RUN rm -f requirements.txt
 
-# ENTRYPOINT [ "bash" ]
-ENTRYPOINT [ "./filehunter.py" ]
+# Do cleanups
+RUN apt-get -y autoremove && \
+    apt-get clean
+
+# ENTRYPOINT ["bash"]
+ENTRYPOINT ["./filehunter.py"]

@@ -86,7 +86,8 @@ if __name__ == "__main__":
     parser_database.add_argument("--setup",
                                  type=str,
                                  choices=[item.name for item in DatabaseType],
-                                 help="run initial setup for filehunter")
+                                 help="run initial setup for filehunter (in a Docker environment this argument has"
+                                      "the same behaviour as argument --setup-dbg)")
     parser_database.add_argument("--setup-dbg",
                                  type=str,
                                  choices=[item.name for item in DatabaseType],

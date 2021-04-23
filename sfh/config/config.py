@@ -64,6 +64,10 @@ class BaseConfig:
     def get_home_dir():
         return os.path.join(os.path.expanduser("~"), ".sfh")
 
+    @staticmethod
+    def is_docker():
+        return os.path.exists("/.dockerenv")
+
 
 class FileHunter(BaseConfig):
     """This class contains the ConfigParser object for the database"""
@@ -175,10 +179,24 @@ class DatabaseSqlite(BaseDatabase):
                          unittest_section="sqlite_unittesting")
 
     def get_path(self, section_name: str):
+        """
+        This method returns the location of the SQLite database. Thereby, the following three cases exists.
+        1. If the database name, which is specified in the configuration file starts with a /, then this method
+           assumes that the configuration file contains an absolute path to the SQLlite database. In this case, this
+           path is used.
+        2. If SFH is executed in the docker container (environment variable SFH_DOCKER is present), then the SQLlite
+           database is stored in SFH's configuration directory.
+        3. If SFH is natively executed, then the SQLite database is stored in the user's home directory.
+        """
         database_name = self.get_config_str(section_name, "name")
         if database_name and database_name[0] == "/":
+            # If the database name contains an absolulte path, then we take this path
             result = database_name
+        elif self.is_docker():
+            # If SFH is running inside a docker container, then we use SFH's configuration directory
+            result = os.path.join(self._config_dir, database_name)
         else:
+            # In any other case we use ~/.sfh
             result = os.path.join(self.get_home_dir(), database_name)
         return result
 

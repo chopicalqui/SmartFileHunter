@@ -6,5 +6,6 @@ hexdump
 pyunpack
 patool
 passgen
+psycopg2-binary
 sqlalchemy
 termcolor

@@ -1,3 +1,4 @@
 **/*.db
 **/*.bak
 **/*.pyc
+sfh/config

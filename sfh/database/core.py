@@ -137,7 +137,7 @@ class Engine:
         This method drops the databases
         """
         """This method drops all views and tables in the database."""
-        if self._config.is_postgres:
+        if not self._config.is_docker() and self._config.is_postgres:
             with tempfile.TemporaryDirectory() as temp:
                 uid = pwd.getpwnam("postgres").pw_uid
                 gid = grp.getgrnam("postgres").gr_gid
@@ -440,6 +440,8 @@ class ManageDatabase:
                 session.add(workspace)
 
     def _setup(self, debug: bool):
+        if self._hunter_config.is_docker():
+            debug = True
         setup_commands = []
         if not debug:
             self._db_config.write()

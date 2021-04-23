@@ -1,0 +1,7 @@
+version: "3"
+services:
+  smartfilehunter:
+    network_mode: host
+    volumes:
+      - /opt/smartfilehunter/sfh/config/:/opt/smartfilehunter/config/
+    build: .
