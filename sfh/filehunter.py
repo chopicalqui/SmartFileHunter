@@ -31,8 +31,9 @@ import tempfile
 import impacket
 from queue import Queue
 from database.core import Engine
-from database.core import ManageDatabase
 from database.core import DeclarativeBase
+from database.setup import SetupTask
+from database.setup import ManageDatabase
 from database.review import ReviewConsole
 from database.report import ReportGenerator
 from database.model import WorkspaceNotFound
@@ -40,12 +41,12 @@ from database.model import HunterType
 from database.model import Host
 from database.model import Service
 from database.model import Workspace
+from config.config import DatabaseType
 from hunters.analyzer.core import FileAnalzer
 from hunters.modules.smb import SmbSensitiveFileHunter
 from hunters.modules.ftp import FtpSensitiveFileHunter
 from hunters.modules.nfs import NfsSensitiveFileHunter
 from hunters.modules.local import LocalSensitiveFileHunter
-from config.config import DatabaseType
 from config.config import FileHunter as FileHunterConfig
 
 logger = logging.getLogger("main")
@@ -63,7 +64,9 @@ if __name__ == "__main__":
                                                                      "or banner information)")
     parser.add_argument("--log", metavar="FILE", type=str, help="log messages to the given file")
     sub_parser = parser.add_subparsers(help='list of available file hunter modules', dest="module")
-    parser_database = sub_parser.add_parser('db', help='allows setting up and managing the database')
+    parser_database = sub_parser.add_parser('db', help='allows managing the database')
+    if not FileHunterConfig.is_docker():
+        parser_setup = sub_parser.add_parser('setup', help='allows setting up smart file hunter')
     parser_review = sub_parser.add_parser('review', help='start file hunter console')
     parser_report = sub_parser.add_parser("report", help='obtain reports about the collected data')
     parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')
@@ -83,15 +86,18 @@ if __name__ == "__main__":
                                  action="store_true")
     parser_database.add_argument("--backup", metavar="FILE", type=str, help="writes database backup to FILE")
     parser_database.add_argument("--restore", metavar="FILE", type=str, help="restores database backup from FILE")
-    parser_database.add_argument("--setup",
-                                 type=str,
-                                 choices=[item.name for item in DatabaseType],
-                                 help="run initial setup for filehunter (in a Docker environment this argument has"
-                                      "the same behaviour as argument --setup-dbg)")
-    parser_database.add_argument("--setup-dbg",
-                                 type=str,
-                                 choices=[item.name for item in DatabaseType],
-                                 help="like --setup but just prints commands for initial setup for filehunter")
+    # setup SFH parser
+    if not FileHunterConfig.is_docker():
+        parser_setup_db = parser_setup.add_mutually_exclusive_group()
+        parser_setup_db.add_argument("--{}".format(DatabaseType.postgresql.name),
+                                     action="store_true",
+                                     help="setup a PostgreSQL database")
+        parser_setup_db.add_argument("--{}".format(DatabaseType.sqlite.name),
+                                     action="store_true",
+                                     help="setup a SQLite database")
+        parser_setup.add_argument("--debug", action="store_true", help="only print but do not execute commands")
+        choices = [item.name.replace("_", "-") for item in SetupTask]
+        parser_setup.add_argument("--tasks", nargs="+", choices=choices, default=choices)
     # setup console parser
     parser_review.add_argument('-w', '--workspace',
                                required=True,
@@ -190,7 +196,7 @@ if __name__ == "__main__":
                 engine = Engine()
                 DeclarativeBase.metadata.bind = engine.engine
                 engine.print_workspaces()
-            elif args.module == "db":
+            elif args.module in ["db", "setup"]:
                 ManageDatabase(args).run()
             elif args.module == "review":
                 if args.workspace:

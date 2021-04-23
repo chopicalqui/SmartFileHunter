@@ -22,16 +22,11 @@ __version__ = 0.1
 
 import grp
 import pwd
-import time
-import passgen
-import argparse
 import tempfile
 import ipaddress
 import subprocess
-from threading import Thread
 from sqlalchemy import create_engine
 from config.config import DatabaseFactory
-from config.config import FileHunter as FileHunterConfig
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
@@ -398,127 +393,3 @@ class Engine:
             result.category = category
         return result
 
-
-class ManageDatabase:
-    """
-    This class implements the initial setup for KIS
-    """
-    def __init__(self, args: argparse.Namespace):
-        self._arguments = args
-        self._hunter_config = FileHunterConfig()
-        self._db_config = DatabaseFactory()
-        self._db_config.password = passgen.passgen(30)
-
-    def run(self):
-        if self._arguments.setup_dbg:
-            self._db_config.type = self._arguments.setup_dbg
-            self._setup(debug=True)
-        elif self._arguments.setup:
-            self._db_config.type = self._arguments.setup
-            self._setup(debug=False)
-        if self._arguments.backup:
-            engine = Engine()
-            DeclarativeBase.metadata.bind = engine.engine
-            engine.create_backup(self._arguments.backup)
-        if self._arguments.restore:
-            engine = Engine()
-            DeclarativeBase.metadata.bind = engine.engine
-            engine.restore_backup(self._arguments.restore)
-        if self._arguments.drop:
-            engine = Engine()
-            DeclarativeBase.metadata.bind = engine.engine
-            engine.recreate_database()
-        if self._arguments.init:
-            engine = Engine()
-            DeclarativeBase.metadata.bind = engine.engine
-            engine.init()
-        if self._arguments.add:
-            engine = Engine()
-            DeclarativeBase.metadata.bind = engine.engine
-            with engine.session_scope() as session:
-                workspace = Workspace(name=self._arguments.add)
-                session.add(workspace)
-
-    def _setup(self, debug: bool):
-        if self._hunter_config.is_docker():
-            debug = True
-        setup_commands = []
-        if not debug:
-            self._db_config.write()
-        for file in self._hunter_config.scripts:
-            base_name = os.path.splitext(file)[0]
-            real_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-            python_script = os.path.join(real_path, file)
-            os_command = ["ln", "-sT", python_script, os.path.join("/usr/bin", base_name)]
-            setup_commands.append(SetupCommand(description="creating link file for {}".format(python_script),
-                                               command=os_command))
-        if self._db_config.is_postgres:
-            setup_commands.append(SetupCommand(description="adding PostgresSql database to auto start",
-                                               command=["update-rc.d", "postgresql", "enable"],
-                                               return_code=0))
-            setup_commands.append(SetupCommand(description="starting PostgreSql database",
-                                               command=["service", "postgresql", "start"],
-                                               return_code=0))
-            setup_commands.append(SetupCommand(description="adding PostgreSql database user '{}'"
-                                               .format(self._db_config.username),
-                                               command=["sudo", "-u", "postgres", "createuser",
-                                                        self._db_config.username]))
-            setup_commands.append(SetupCommand(description="setting PostgreSql database user '{}' password"
-                                               .format(self._db_config.username),
-                                               command=["sudo", "-u", "postgres", "psql", "-c",
-                                                        "alter user {} with encrypted password '{}'"
-                                               .format(self._db_config.database, self._db_config.password)]))
-            for database in self._db_config.databases:
-                setup_commands.append(SetupCommand(description=
-                                                   "creating PostgreSql database '{}'".format(database),
-                                                   command=["sudo", "-u", "postgres", "createdb", database]))
-                setup_commands.append(SetupCommand(description="setting PostgreSql database user '{}' "
-                                                               "permissions on database '{}'"
-                                                   .format(self._db_config.username, database),
-                                                   command=["sudo", "-u", "postgres", "psql", "-c",
-                                                            "grant all privileges on database {} to {}"
-                                                   .format(database, self._db_config.username)],
-                                                   return_code=0))
-        elif not os.path.isdir(self._hunter_config.get_home_dir()):
-            setup_commands.append(SetupCommand(description="create ~/.sfh directory for SQLite database",
-                                               command=["mkdir", self._hunter_config.get_home_dir()],
-                                               return_code=0))
-        setup_commands.append(SetupCommand(description="creating the tables, triggers, views, etc.",
-                                           command=["filehunter", "db", "--drop", "--init"]))
-        if self._hunter_config.kali_packages:
-            apt_command = ["apt-get", "install", "-q", "--yes"]
-            apt_command.extend(self._hunter_config.kali_packages)
-            setup_commands.append(SetupCommand(description="installing additional Kali packages",
-                                               command=apt_command,
-                                               return_code=0))
-        ok = True
-        for command in setup_commands:
-            if ok:
-                ok = command.execute(debug)
-
-
-class SetupCommand:
-
-    def __init__(self, description: str, command: List[str], return_code: int = None):
-        self._description = description
-        self._return_code = return_code
-        self._command = command
-
-    def _print_output(self, prefix: str, output: List[str]) -> None:
-        for line in iter(output.readline, b''):
-            line = line.decode("utf-8").strip()
-            print("{}   {}".format(prefix, line))
-
-    def execute(self, debug: bool=False) -> bool:
-        "Executes the given command"
-        rvalue = True
-        print("[*] {}".format(self._description))
-        print("    $ {}".format(subprocess.list2cmdline(self._command)))
-        if not debug:
-            p = subprocess.Popen(self._command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            Thread(target=self._print_output, args=("[*]", p.stdout, ), daemon=True).start()
-            Thread(target=self._print_output, args=("[e]", p.stderr, ), daemon=True).start()
-            return_code = p.wait()
-            rvalue = (self._return_code == return_code if self._return_code is not None else True)
-            time.sleep(1)
-        return rvalue
