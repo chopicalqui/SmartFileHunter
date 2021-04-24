@@ -73,9 +73,6 @@ class ReviewConsole(Cmd):
             self._options[ConsoleOption.workspace] = args.workspace
         self._options[ConsoleOption.filter] = "File.review_result IS NULL OR File.review_result = 'tbd'"
         self._update_file_list()
-        self._update_prompt_text()
-        if args.workspace:
-            self.do_n(None)
 
     def _update_prompt_text(self):
         """
@@ -101,9 +98,10 @@ class ReviewConsole(Cmd):
                 .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
                                                                    self._options[ConsoleOption.filter])))
                 .distinct()
-                .order_by(desc(MatchRule.relevance), desc(MatchRule.accuracy), asc(Path.extension))]
+                .order_by(asc(MatchRule.relevance), asc(MatchRule.accuracy), asc(Path.extension))]
         self._cursor_id = 0
         self._update_prompt_text()
+        self.do_n(None)
 
     def _update_view(self):
         """
@@ -219,7 +217,6 @@ class ReviewConsole(Cmd):
         Load current results into memory
         """
         self._update_file_list()
-        self.do_n(input)
 
     def help_refresh(self):
         print('update view by loading current results from database into memory for review')

@@ -71,21 +71,20 @@ class ReviewResult(enum.Enum):
 
 
 class FileRelevance(enum.Enum):
-    low = 100
-    medium = 80
-    high = 70
+    low = 200
+    medium = 2000
+    high = 20000
 
 
 class MatchRuleAccuracy(enum.Enum):
     low = 100
-    medium = 80
-    high = 70
+    medium = 1000
+    high = 10000
 
 
 class SearchLocation(enum.Enum):
-    file_name = 20
-    directory_name = 10
-    file_content = 0
+    file_name = 1
+    file_content = 100
 
 
 file_match_rule_mapping = Table("file_match_rule_mapping", DeclarativeBase.metadata,
