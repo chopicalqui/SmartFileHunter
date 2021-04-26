@@ -53,7 +53,6 @@ class FileAnalzer(BaseAnalyzer):
         while True:
             try:
                 path = self.file_queue.get()
-                logger.debug("thread {:00d} dequeues path: {}".format(self._id, str(path)))
                 self._number_of_processed_files += 1
                 self.analyze(path)
             except Exception as ex:
@@ -99,7 +98,10 @@ class FileAnalzer(BaseAnalyzer):
                     logger.exception(ex)
                 # If content search did not return any results or failed, then just analyze the file name
                 if not result:
-                    self._analyze_path_name(path)
+                    result = self._analyze_path_name(path)
+                    if self._args.debug and not result:
+                        logger.debug("ignoring file (threshold: below, size: {}): {}".format(path.file.size_bytes,
+                                                                                             str(path)))
 
     def _extract_archive(self, path: Path):
         """

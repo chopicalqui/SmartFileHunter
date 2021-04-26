@@ -365,7 +365,7 @@ class TestMatchRule(BaseDataModelTestCase):
             self.assertEqual(FileRelevance.high, file_match.relevance)
             self.assertEqual(MatchRuleAccuracy.high, file_match.accuracy)
             self.assertEqual(".*", file_match.search_pattern)
-            self.assertEqual(162, file_match.priority)
+            self.assertEqual(30003, file_match.priority)
 
     def test_highlight_text(self):
         text = b"""# Oracle DB properties

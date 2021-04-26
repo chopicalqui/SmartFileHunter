@@ -36,6 +36,7 @@ from database.model import Path
 from sqlalchemy import text
 from sqlalchemy import asc
 from sqlalchemy import desc
+from sqlalchemy.sql.expression import func
 
 
 class ConsoleOption(enum.Enum):
@@ -98,7 +99,11 @@ class ReviewConsole(Cmd):
                 .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
                                                                    self._options[ConsoleOption.filter])))
                 .distinct()
-                .order_by(asc(MatchRule.relevance), asc(MatchRule.accuracy), asc(Path.extension))]
+                .order_by(desc(MatchRule.search_location),
+                          desc(MatchRule.relevance),
+                          desc(MatchRule.accuracy),
+                          func.length(MatchRule._search_pattern).desc(),
+                          asc(Path.extension))]
         self._cursor_id = 0
         self._update_prompt_text()
         self.do_n(None)

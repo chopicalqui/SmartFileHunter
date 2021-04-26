@@ -202,7 +202,7 @@ matched first and therefore nor further searches are required.
 
 ### Supported Services
 
-One objective of SFH is supporting the majority of file sharing services so that an standardized enumeration
+One objective of SFH is supporting the majority of file sharing services so that a standardized enumeration
 process can be applied on all files. This section describes the most important aspects per supported service.
 
 Before you start a new engagement, you might want to re-initialize the database (arguments `--drop` and `--init`),
@@ -328,7 +328,7 @@ The interactive command prompt provides the following commands:
   - **n**: Display next file.
   - **p**: Display previous file.
   - **q**: Quit review.
-  - **refresh**: SFH does not automatically update the list of available files to ensure a consistent review behaviour.
+  - **refresh**: SFH does not automatically update the list of available files to ensure a consistent review behavior.
   Use this command, if the collection is still going on, while you are doing the review and you want to obtain the
   latest files.
   - **set**: Allows updating the current workspace as well as the current review filter. The default filter only
@@ -349,7 +349,8 @@ refer to the SFH help:
 $ sudo docker-compose run smartfilehunter report -h
 ```
 
-The following video provides an example report about the previously identified relevant files:
+The following video provides an example CSV report about the relevant files, which were identified during the
+previous review:
 ![](media/report-csv.gif)
 
 

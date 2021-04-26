@@ -133,7 +133,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         """
         for name in self.shares:
             try:
-                logger.debug("enumerate share: {}".format(name))
+                logger.debug("enumerate share: {}/{}".format(str(self.service), name))
                 self.__enumerate(name)
             except Exception:
                 logger.error("cannot access share: {}/{}".format(str(self.service), name), exc_info=self._args.verbose)
@@ -166,7 +166,6 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                                         content = file.read()
                                 path.file = File(content=content)
                                 # Add file to queue
-                                logger.debug("enqueue file: {}".format(str(path)))
                                 self.file_queue.put(path)
                             except impacket.smbconnection.SessionError:
                                 # Catch permission exception, if SMB user does not have read permission on a certain file
@@ -175,8 +174,11 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                             path.file = File(content="[file ({}) not imported as file size ({}) "
                                                      "is above threshold]".format(str(path), file_size).encode('utf-8'))
                             path.file.size_bytes = file_size
-                            self._analyze_path_name(path)
+                            relevance = self._analyze_path_name(path)
+                            if self._args.debug and not relevance:
+                                logger.debug("ignoring file (threshold: above, size: {}): {}".format(file_size,
+                                                                                                     str(path)))
         except impacket.smbconnection.SessionError:
             # Catch permission exception, if SMB user does not have read permission on a certain directory
-            logger.error("cannot access item: {}{}".format(str(self.service), str(directory)),
+            logger.error("cannot access item: {}/{}{}".format(str(self.service), share, str(directory)),
                          exc_info=self._args.verbose)

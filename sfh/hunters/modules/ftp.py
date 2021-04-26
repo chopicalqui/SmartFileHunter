@@ -94,7 +94,6 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
                                     content = file.read()
                             path.file = File(content=content)
                             # Add file to queue
-                            logger.debug("enqueue file: {}".format(str(path)))
                             self.file_queue.put(path)
                         except ftplib.error_perm:
                             # Catch permission exception, if FTP user does not have read permission on a certain file
@@ -103,7 +102,9 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
                         path.file = File(content="[file ({}) not imported as file size ({}) "
                                                  "is above threshold]".format(str(path), file_size).encode('utf-8'))
                         path.file.size_bytes = file_size
-                        self._analyze_path_name(path)
+                        relevance = self._analyze_path_name(path)
+                        if self._args.debug and not relevance:
+                            logger.debug("ignoring file (threshold: above, size: {}): {}".format(file_size, str(path)))
                 else:
                     logger.debug("skip type item: {} (type: {})".format(name, item_type))
         except ftplib.error_perm:

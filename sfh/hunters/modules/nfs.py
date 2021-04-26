@@ -74,10 +74,13 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                     if self.is_file_size_below_threshold(file_size):
                         content = self.client.open(full_path, mode='rb').read()
                         path.file = File(content=bytes(content))
-                        logger.debug("enqueue file: {}".format(str(path)))
+                        # Add file to queue
                         self.file_queue.put(path)
                     elif file_size > 0:
                         path.file = File(content="[file ({}) not imported as file size ({}) "
                                                  "is above threshold]".format(str(path), file_size).encode('utf-8'))
                         path.file.size_bytes = file_size
-                        self._analyze_path_name(path)
+                        relevance = self._analyze_path_name(path)
+                        if self._args.debug and not relevance:
+                            logger.debug("ignoring file (threshold: above, size: {}): {}".format(file_size,
+                                                                                                 str(path)))

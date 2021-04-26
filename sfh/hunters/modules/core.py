@@ -55,7 +55,6 @@ class BaseSensitiveFileHunter(BaseAnalyzer):
         self.port = port
         self.address = address
         self.temp_dir = temp_dir
-        self._args = args
         # we add the current host and service to the database so that the consumer threads can use them
         with self.engine.session_scope() as session:
             workspace = self.engine.get_workspace(session, name=args.workspace)
