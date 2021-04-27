@@ -9,3 +9,5 @@ passgen
 psycopg2-binary
 sqlalchemy
 termcolor
+pandas
+numpy

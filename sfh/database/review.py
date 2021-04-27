@@ -23,6 +23,8 @@ __version__ = 0.1
 import os
 import sys
 import enum
+import numpy
+import pandas
 import argparse
 from cmd import Cmd
 from config.config import FileHunter as FileHunterConfig
@@ -33,10 +35,19 @@ from database.model import SearchLocation
 from database.model import Workspace
 from database.model import ReviewResult
 from database.model import Path
+from database.model import FileRelevance
+from database.model import MatchRuleAccuracy
 from sqlalchemy import text
 from sqlalchemy import asc
 from sqlalchemy import desc
 from sqlalchemy.sql.expression import func
+
+
+class DistributionType(enum.Enum):
+    relevance = enum.auto()
+    extension = enum.auto()
+    mimetype = enum.auto()
+    result = enum.auto()
 
 
 class ConsoleOption(enum.Enum):
@@ -276,13 +287,79 @@ class ReviewConsole(Cmd):
             self._update_file_list()
 
     def help_set(self):
-        print("""Usage: set [option] [value]
+        print("""usage: set [option] [value]
 
 set the given option to value.  If value is omitted, print the current value.
 If both are omitted, print options that are currently set.""")
 
-    def help_back(self):
-        print('leave the current environment')
+    def do_stats(self, input: str):
+        arguments = input.strip().split(" ")
+        if len(arguments) == 1 and arguments[0] and arguments[0] in [item.name for item in DistributionType]:
+            argument = DistributionType[arguments[0]]
+            if argument == DistributionType.result:
+                with self._engine.session_scope() as session:
+                    q = session.query(File.review_result, func.count(File.id)) \
+                        .group_by(File.review_result) \
+                        .order_by(File.review_result)
+                    df = pandas.read_sql(q.statement, q.session.bind)
+                    df["review_result"] = df["review_result"].apply(lambda x: x.name if x else x)
+                    print(df)
+            elif argument == DistributionType.relevance:
+                with self._engine.session_scope() as session:
+                    q = session.query(MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
+                        .join((File, MatchRule.files)) \
+                        .group_by(MatchRule._relevance, MatchRule._accuracy) \
+                        .order_by(MatchRule._relevance, MatchRule._accuracy)
+                    df = pandas.read_sql(q.statement, q.session.bind)
+                    df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
+                    df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
+                    print(pandas.pivot_table(df,
+                                             index="relevance",
+                                             columns="accuracy",
+                                             values="count_1",
+                                             aggfunc=numpy.sum,
+                                             fill_value=0))
+            elif argument == DistributionType.extension:
+                with self._engine.session_scope() as session:
+                    q = session.query(Path.extension, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
+                        .join((File, Path.file)) \
+                        .join((MatchRule, File.matches)) \
+                        .group_by(Path.extension, MatchRule._relevance, MatchRule._accuracy) \
+                        .order_by(MatchRule._relevance, MatchRule._accuracy)
+                    df = pandas.read_sql(q.statement, q.session.bind)
+                    df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
+                    df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
+                    print(pandas.pivot_table(df,
+                                             index="extension",
+                                             columns=["relevance", "accuracy"],
+                                             values="count_1",
+                                             aggfunc=numpy.sum,
+                                             fill_value=0))
+            elif argument == DistributionType.mimetype:
+                with self._engine.session_scope() as session:
+                    q = session.query(File.mime_type, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
+                        .join((MatchRule, File.matches)) \
+                        .group_by(File.mime_type, MatchRule._relevance, MatchRule._accuracy) \
+                        .order_by(MatchRule._relevance, MatchRule._accuracy)
+                    df = pandas.read_sql(q.statement, q.session.bind)
+                    df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
+                    df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
+                    print(pandas.pivot_table(df,
+                                             index="mime_type",
+                                             columns=["relevance", "accuracy"],
+                                             values="count_1",
+                                             aggfunc=numpy.sum,
+                                             fill_value=0))
+            else:
+                raise NotImplementedError("case not implemented")
+        else:
+            self.help_stats()
+
+    def help_stats(self):
+        print("""usage: stats {{{0}}}
+
+obtain statistics about the collected files. the information might be useful to exclude certain files from the review
+by updating the filter (see command set).""".format(",".join([item.name for item in list(DistributionType)])))
 
     def do_exit(self, input: str):
         return True
