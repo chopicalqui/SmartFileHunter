@@ -226,7 +226,7 @@ class File(DeclarativeBase):
     matches = relationship("MatchRule",
                            secondary=file_match_rule_mapping,
                            backref=backref("files",
-                                           order_by="asc(MatchRule.relevance)"))
+                                           order_by="asc(MatchRule._relevance)"))
     @property
     def content(self) -> bytes:
         return self._content
@@ -320,11 +320,11 @@ class MatchRule(DeclarativeBase):
 
     __tablename__ = "match_rule"
     id = Column(Integer, primary_key=True)
-    search_location = Column(Enum(SearchLocation), nullable=False, unique=False)
+    _search_location = Column("search_location", Integer, nullable=False, unique=False)
     _search_pattern = Column("search_pattern", Text, nullable=False, unique=False)
     category = Column(Text, nullable=True, unique=False)
-    relevance = Column(Enum(FileRelevance), nullable=False, unique=False)
-    accuracy = Column(Enum(MatchRuleAccuracy), nullable=False, unique=False)
+    _relevance = Column("relevance", Integer, nullable=False, unique=False)
+    _accuracy = Column("accuracy", Integer, nullable=False, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
     _search_pattern_re = None
@@ -335,8 +335,8 @@ class MatchRule(DeclarativeBase):
     def priority(self):
         """Returns the priority of the given rule"""
         result = 0
-        if self.search_location and self.relevance and self.accuracy and self.search_pattern:
-            result = self.search_location.value + self.relevance.value + self.accuracy.value + len(self.search_pattern)
+        if self._search_location and self._relevance and self._accuracy and self.search_pattern:
+            result = self._search_location + self._relevance + self._accuracy + len(self.search_pattern)
         return result
 
     @property
@@ -347,6 +347,42 @@ class MatchRule(DeclarativeBase):
     def search_pattern(self, value: str) -> None:
         self._search_pattern = value
         self._search_pattern_re = re.compile(value.encode("utf-8"), re.IGNORECASE)
+
+    @property
+    def search_location(self):
+        result = None
+        if self._search_location:
+            result = SearchLocation(self._search_location)
+        return result
+
+    @search_location.setter
+    def search_location(self, value):
+        if value:
+            self._search_location = value.value
+
+    @property
+    def relevance(self) -> FileRelevance:
+        result = None
+        if self._relevance:
+            result = FileRelevance(self._relevance)
+        return result
+
+    @relevance.setter
+    def relevance(self, value: FileRelevance):
+        if value:
+            self._relevance = value.value
+
+    @property
+    def accuracy(self) -> MatchRuleAccuracy:
+        result = None
+        if self._accuracy:
+            result = MatchRuleAccuracy(self._accuracy)
+        return result
+
+    @accuracy.setter
+    def accuracy(self, value: MatchRuleAccuracy):
+        if value:
+            self._accuracy = value.value
 
     @property
     def search_pattern_re(self):
@@ -362,7 +398,7 @@ class MatchRule(DeclarativeBase):
 
     @property
     def relevance_str(self):
-        return self.relevance.name if self.relevance else ""
+        return self.relevance.name if self._relevance else ""
 
     @property
     def relevance_with_color_str(self):

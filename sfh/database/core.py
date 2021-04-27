@@ -360,7 +360,7 @@ class Engine:
         :param search_pattern: The match rule's search pattern
         :return: Database object
         """
-        return session.query(MatchRule).filter_by(search_location=search_location,
+        return session.query(MatchRule).filter_by(_search_location=search_location.value,
                                                   _search_pattern=search_pattern).one_or_none()
 
     @staticmethod

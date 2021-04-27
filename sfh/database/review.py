@@ -49,10 +49,14 @@ class ConsoleOption(enum.Enum):
             result = """ review files in the given workspace"""
         elif option == ConsoleOption.filter:
             result = """ update where clause to limit review list. examples of valid filters are:
- - All files that have not been reviewed  and do not have the extension log: (File.review_result IS NULL OR File.review_result = 'tbd') AND Path.extension NOT IN ('.log')
- - All files that have not been reviewed:                                    File.review_result IS NULL OR File.review_result = 'tbd'
- - Only relevant files:                                                      File.review_result IS NOT NULL AND File.review_result = 'relevant'
- - Get all results:                                                          1=1"""
+ - All files that have not been reviewed and do not have the extension log:
+       (File.review_result IS NULL OR File.review_result = 'tbd') AND Path.extension NOT IN ('log')
+ - All files that have not been reviewed:
+       File.review_result IS NULL OR File.review_result = 'tbd'
+ - Only relevant files:
+       File.review_result IS NOT NULL AND File.review_result = 'relevant'
+ - Get all results:
+       1=1"""
         else:
             raise NotImplementedError("case not implemented")
         return result
@@ -99,9 +103,9 @@ class ReviewConsole(Cmd):
                 .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
                                                                    self._options[ConsoleOption.filter])))
                 .distinct()
-                .order_by(desc(MatchRule.search_location),
-                          desc(MatchRule.relevance),
-                          desc(MatchRule.accuracy),
+                .order_by(desc(MatchRule._search_location),
+                          desc(MatchRule._relevance),
+                          desc(MatchRule._accuracy),
                           func.length(MatchRule._search_pattern).desc(),
                           asc(Path.extension))]
         self._cursor_id = 0
