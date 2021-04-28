@@ -7,6 +7,8 @@ information like passwords, private keys, virtual machines, etc. Thereby, SFH su
  - Samba Message Block (SMB) network shares
  - Local directories
 
+![](media/intro.gif)
+
 In addition, it provides a review platform, which allows the analysis and classification of the identified files into
 relevant and irrelevant. Finally, for reporting purposes, the identified relevant files can be exported into a CSV or
 Microsoft Excel file. The process is documented in the following figure:
@@ -43,7 +45,7 @@ In order to use SFH in a Docker environment, follow the following configuration 
  
  - **[optional]** If you want to use PostgreSQL (default is SQLite), then you have to set it up first. In addition,
  you have to update the following configuration items in
- [/opt/smartfilehunter/sfh/config/database.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/database.config):
+ [database.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/database.config):
    - In section `[database]`, update item `active` from `sqlite` to `postgresql`
    - In section `[postgresql_production]`, update the configuration items accordingly:
      
@@ -124,7 +126,7 @@ subsection *Supported Services*.
 
 ### Matching Rules
 SFH performs searches based on rules, which are defined in the configuration file
-[hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/hunter/config/hunter.config). Each rule has
+[hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/hunter.config). Each rule has
 the following attributes:
  - **search_location**: This attribute specifies whether the **search_pattern** (see below) is applied on the file's
  name or the file's content.
@@ -162,12 +164,12 @@ length):
 SFH recursively searches the given service (see next subsections) for relevant files. Thereby, it also
 recursively extracts and analyzes the contents of archive files like ZIP, TAR, BZ2, etc. Which archives are
 analyzed, is specified by the list ``supported_archives``, which is located in the configuration file
-[hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/hunter/config/hunter.config).
+[hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/hunter.config).
 
 For each identified file, SFH performs the following analysis steps:
   1. SFH determines the file's size and compares it to the internal threshold ``max_file_size_bytes``, which is located
   in configuration file
-  [hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/hunter/config/hunter.config). You can
+  [hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/hunter.config). You can
   deactivate the threshold by setting ``max_file_size_bytes`` to 0. Nevertheless, I do not recommend this configuration
   (see point 2).
   2. If the file's size is above this threshold (default is 67108864 bytes), then SFH does not download the file for
