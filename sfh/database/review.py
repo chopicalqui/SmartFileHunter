@@ -308,6 +308,9 @@ If both are omitted, print options that are currently set.""")
                 with self._engine.session_scope() as session:
                     q = session.query(MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
                         .join((File, MatchRule.files)) \
+                        .join((Workspace, File.workspace)) \
+                        .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
+                                                                           self._options[ConsoleOption.filter]))) \
                         .group_by(MatchRule._relevance, MatchRule._accuracy) \
                         .order_by(MatchRule._relevance, MatchRule._accuracy)
                     df = pandas.read_sql(q.statement, q.session.bind)
@@ -324,6 +327,9 @@ If both are omitted, print options that are currently set.""")
                     q = session.query(Path.extension, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
                         .join((File, Path.file)) \
                         .join((MatchRule, File.matches)) \
+                        .join((Workspace, File.workspace)) \
+                        .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
+                                                                           self._options[ConsoleOption.filter]))) \
                         .group_by(Path.extension, MatchRule._relevance, MatchRule._accuracy) \
                         .order_by(MatchRule._relevance, MatchRule._accuracy)
                     df = pandas.read_sql(q.statement, q.session.bind)
@@ -339,6 +345,9 @@ If both are omitted, print options that are currently set.""")
                 with self._engine.session_scope() as session:
                     q = session.query(File.mime_type, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
                         .join((MatchRule, File.matches)) \
+                        .join((Workspace, File.workspace)) \
+                        .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
+                                                                           self._options[ConsoleOption.filter]))) \
                         .group_by(File.mime_type, MatchRule._relevance, MatchRule._accuracy) \
                         .order_by(MatchRule._relevance, MatchRule._accuracy)
                     df = pandas.read_sql(q.statement, q.session.bind)

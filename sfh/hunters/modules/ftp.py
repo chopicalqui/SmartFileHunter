@@ -64,6 +64,33 @@ class FtpSensitiveFileHunter(BaseSensitiveFileHunter):
         if self.client:
             self.client.close()
 
+    @staticmethod
+    def add_argparse_arguments(parser: argparse.ArgumentParser) -> None:
+        """
+        This method initializes command line arguments that are required by the current module.
+        :param parser: The argument parser to which the required command line arguments shall be added.
+        :return:
+        """
+        BaseSensitiveFileHunter.add_argparse_arguments(parser)
+        parser.add_argument('--tls', action="store_true", help='use TLS')
+        parser.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
+                            help='the name of the domain name of existing microsoft active directories. if specified, '
+                                 'then the specified values become additional file content matching rules with'
+                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
+                                 'user names in files.')
+        ftp_target_group = parser.add_argument_group('target information')
+        ftp_target_group.add_argument('--host', type=str, metavar="HOST", help="the target FTP service's IP address")
+        ftp_target_group.add_argument('--port', type=int, default=21, metavar="PORT",
+                                      help="the target FTP service's port")
+        ftp_authentication_group = parser.add_argument_group('authentication')
+        ftp_authentication_group.add_argument('-u', '--username', action="store", default='',
+                                              metavar="USERNAME", help='the name of the user to use for authentication')
+        parser_ftp_credential_group = ftp_authentication_group.add_mutually_exclusive_group()
+        parser_ftp_credential_group.add_argument('-p', '--password', action="store", default='',
+                                                 metavar="PASSWORD", help='password of given user')
+        parser_ftp_credential_group.add_argument('-P', dest="prompt_for_password", action="store_true",
+                                                 help='ask for the password via an user input prompt')
+
     def _enumerate(self, cwd: str = None) -> None:
         """
         This method enumerates all files on the given service.

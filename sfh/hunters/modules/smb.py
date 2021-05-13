@@ -103,6 +103,42 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         if self.client:
             self.client.close()
 
+    @staticmethod
+    def add_argparse_arguments(parser: argparse.ArgumentParser) -> None:
+        """
+        This method initializes command line arguments that are required by the current module.
+        :param parser: The argument parser to which the required command line arguments shall be added.
+        :return:
+        """
+        BaseSensitiveFileHunter.add_argparse_arguments(parser)
+        parser.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
+                            help='the name of the domain name of existing microsoft active directories. if specified, '
+                                 'then the specified values become additional file content matching rules with'
+                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
+                                 'user names in files.')
+        smb_target_group = parser.add_argument_group('target information')
+        smb_target_group.add_argument('--host', type=str, metavar="HOST", help="the target SMB service's IP address")
+        smb_target_group.add_argument('--port', type=int, default=445, metavar="PORT",
+                                      help="the target SMB service's port")
+        smb_target_group.add_argument('--shares', type=str, nargs="*", metavar="SHARES",
+                                      help="list of shares to enumerate. if not specified, then all shares will be "
+                                           "enumerated.")
+        smb_authentication_group = parser.add_argument_group('authentication')
+        smb_authentication_group.add_argument('-u', '--username', type=str,
+                                              metavar="USERNAME", help='the name of the user to use for authentication')
+        smb_authentication_group.add_argument('-d', '--domain', default=".", type=str,
+                                              metavar="DOMAIN", help='the domain to use for authentication')
+        parser_smb_credential_group = smb_authentication_group.add_mutually_exclusive_group()
+        parser_smb_credential_group.add_argument('--hash', action="store",
+                                                 metavar="LMHASH:NTHASH", help='NTLM hashes, valid formats are'
+                                                                               'LMHASH:NTHASH or NTHASH')
+        parser_smb_credential_group.add_argument('-p', '--password', action="store",
+                                                 metavar="PASSWORD", help='password of given user')
+        parser_smb_credential_group.add_argument('-P', dest="prompt_for_password", action="store_true",
+                                                 help='ask for the password via an user input prompt')
+        parser_smb_credential_group.add_argument('-H', dest="prompt_for_hash", action="store_true",
+                                                 help='ask for the hash via an user input prompt')
+
     def pathify(self, path):
         """
         Method obtained from smbmap

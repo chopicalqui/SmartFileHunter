@@ -28,7 +28,11 @@ from database.model import Host
 from database.model import Path
 from database.model import File
 from database.model import Service
+from database.model import MatchRule
 from database.model import HunterType
+from database.model import SearchLocation
+from database.model import FileRelevance
+from database.model import MatchRuleAccuracy
 from test.core import BaseTestCase
 from hunters.analyzer.core import FileAnalzer
 from config.config import FileHunter
@@ -43,16 +47,16 @@ class ArgumentHelper:
         self.nocolor = nocolor
 
 
-class TestFileAnalzer(BaseTestCase):
+class BaseTestFileAnalyzer(BaseTestCase):
 
     def __init__(self, test_name: str):
         super().__init__(test_name)
 
-    def _add_file_content(self, workspace: str, full_path: str, b64_content: str):
+    def _add_file_content(self, workspace: str, full_path: str, b64_content: str = None, txt_content: str = None):
         """
         This method analyzes the given file.
         """
-        content = base64.b64decode(b64_content)
+        content = base64.b64decode(b64_content) if b64_content else txt_content.encode()
         # Add workspace
         with self._engine.session_scope() as session:
             self._engine.add_workspace(session=session, name=workspace)
@@ -66,6 +70,12 @@ class TestFileAnalzer(BaseTestCase):
                     full_path=full_path,
                     file=File(content=content))
         analyzer.analyze(path)
+
+
+class TestArchives(BaseTestFileAnalyzer):
+
+    def __init__(self, test_name: str):
+        super().__init__(test_name)
 
     def test_invalid_zip_file(self):
         """
@@ -137,6 +147,12 @@ xNdpISDsXckU4UJDHGiRaA==""")
             results.sort()
             self.assertListEqual(['/SHARE$/it/backup.tar.bz2/db.properties'], results)
 
+
+class TestFileSize(BaseTestFileAnalyzer):
+
+    def __init__(self, test_name: str):
+        super().__init__(test_name)
+
     def test_file_size_only_update(self):
         """
         If only the file size is stored in the database (without actual file content), then the file size should not
@@ -166,3 +182,228 @@ xNdpISDsXckU4UJDHGiRaA==""")
             result = session.query(Path).one()
             self.assertEqual(full_path, result.full_path)
             self.assertEqual(file_size, result.file.size_bytes)
+
+
+class TestFileContent(BaseTestFileAnalyzer):
+
+    def __init__(self, test_name: str):
+        super().__init__(test_name)
+
+    def test_commandline_argument_dbpass(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/install.sh",
+                               txt_content="""#!/bin/bash
+php server-install.php --install --dbhost=127.0.0.1 --dbuser=root --dbpass=root
+exit 0""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("\\s+-{1,2}[a-z0-9]*pass[a-z0-9]*[\\s:=,]", result.search_pattern)
+
+    def test_commandline_argument_adminpass(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/install.sh",
+                               txt_content="""#!/bin/bash
+php server-install.php --install --dbhost=127.0.0.1 --dbuser=root --adminpass admin
+exit 0""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("\\s+-{1,2}[a-z0-9]*pass[a-z0-9]*[\\s:=,]", result.search_pattern)
+
+    def test_commandline_argument_password(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/install.sh",
+                               txt_content="""#!/bin/bash
+svn --username='[REDACTED]' --password='[REDACTED]' checkout [REDACTED] /usr/local/[REDACTED]/
+exit 0""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("\\s+-{1,2}[a-z0-9]*password[a-z0-9]*[\\s:=,]", result.search_pattern)
+
+    def test_commandline_mysqladmin_password_update(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/install.sh",
+                               txt_content="""#!/bin/bash
+mysqladmin -u root password [REDACTED]
+exit 0""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.low, result.accuracy)
+            self.assertEqual("\\s[a-z0-9]*password[a-z0-9]*\\s", result.search_pattern)
+
+    def test_commandline_passwd_password_update(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/install.sh",
+                               txt_content="""#!/bin/bash
+echo '[REDACTED]' | passwd root --stdin
+exit 0""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.low, result.accuracy)
+            self.assertEqual("\\s[a-z0-9]*passwd[a-z0-9]*\\s", result.search_pattern)
+
+    def test_commandline_mysql_login(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/install.sh",
+                               txt_content="""#!/bin/bash
+echo "drop database mysql;" | mysql -u root -pREDACTED
+exit 0""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.low, result.accuracy)
+            self.assertEqual("\\s+-p[a-z0-9\\s:=,]", result.search_pattern)
+
+    def test_private_key(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/root/.ssh/id_test",
+                               txt_content="""-----BEGIN RSA PRIVATE KEY-----
+[REDACTED]
+-----END RSA PRIVATE KEY-----""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("^-+BEGIN.*?PRIVATE KEY-+", result.search_pattern)
+
+    def test_perl_password_dict(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/login.pl",
+                               txt_content="""$opt = {
+         'mysql_config' => 'mysql_config',
+         'embedded' => '',
+         'ssl' => 0,
+         'nocatchstderr' => 0,
+         'libs' => '-rdynamic -L/usr/local/mysql/lib/mysql -lmysqlclient -lz -lcrypt -lnsl -lm',
+         'testhost' => '',
+         'nofoundrows' => 0,
+         'testdb' => 'test',
+         'cflags' => '-I/usr/local/mysql/include/mysql -DUNIV_LINUX',
+         'testuser' => '[REDACTED]',
+         'testpassword' => '[REDACTED]',
+         'testsocket' => ''
+       };""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("[a-z0-9]*password[a-z0-9]*\\s*[=:><\"',]", result.search_pattern)
+
+    def test_powershell(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\test.ps1",
+                               txt_content="""$pwd = ConvertTo-SecureString "[REDACTED]" -AsPlainText -Force""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("ConvertTo-SecureString\\s+", result.search_pattern)
+
+    def test_password_in_config_json(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/config.json",
+                               txt_content="""{"Users":[{"Id":"1","Name":"Administrator","Email":"","EncryptedPassword":"[REDACTED]]"},{"Id":"2","Name":"guest","EncryptedPassword":"[REDACTED]"}]}""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("[a-z0-9]*password[a-z0-9]*\\s*[=:><\"',]", result.search_pattern)
+
+    def test_password_in_server_xml(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/server.xml",
+                               txt_content="""<Server port="18005" shutdown="SHUTDOWN">
+  <GlobalNamingResources >
+    <Resource name="jdbc/TEST" auth="Container"
+              type="javax.sql.DataSource" username="postgres" password="postgres"
+              driverClassName="org.postgresql.Driver" url="jdbc:postgresql://localhost:5432/test"
+              maxActive="100" maxIdle="30" maxWait="10000" factory="org.apache.commons.dbcp.BasicDataSourceFactory" />
+  </GlobalNamingResources >
+</Server>""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("[a-z0-9]*password[a-z0-9]*\\s*[=:><\"',]", result.search_pattern)
+
+    def test_connection_string(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/web.config",
+                               txt_content="""<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <connectionStrings>
+    <add name="myConnectionString" connectionString="server=localhost;database=db;uid=root;password=REDACTED;" />
+  </connectionStrings>
+</configuration>""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("connectionString=[\"'].*password\\s*=", result.search_pattern)

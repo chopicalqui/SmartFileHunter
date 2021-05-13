@@ -29,6 +29,7 @@ from database.model import Host
 from database.model import Service
 from database.model import Workspace
 from database.model import HunterType
+from database.model import FileRelevance
 
 logger = logging.getLogger('smb')
 
@@ -73,6 +74,18 @@ class BaseSensitiveFileHunter(BaseAnalyzer):
                                                relevance=match_rule.relevance,
                                                accuracy=match_rule.accuracy,
                                                category=match_rule.category)
+
+    @staticmethod
+    def add_argparse_arguments(parser: argparse.ArgumentParser) -> None:
+        """
+        This method initializes command line arguments that are required by the current module.
+        :param parser: The argument parser to which the required command line arguments shall be added.
+        :return:
+        """
+        relevance = [item.name for item in FileRelevance]
+        parser.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
+        parser.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
+        parser.add_argument('-t', '--threads', type=int, default=10, help='number of analysis threads')
 
     def enumerate(self):
         """

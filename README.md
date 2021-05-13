@@ -335,6 +335,7 @@ The interactive command prompt provides the following commands:
   latest files.
   - **set**: Allows updating the current workspace as well as the current review filter. The default filter only
   shows files that have not yet been reviewed.
+  - **stats**: Provides statistics about the collected data.
  
 Note: SFH remembers the last used command, which will be automatically repeated if you just hit enter. This is
 for example, helpful, if you have a series of irrelevant files.

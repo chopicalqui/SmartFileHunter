@@ -53,7 +53,6 @@ logger = logging.getLogger("main")
 
 
 if __name__ == "__main__":
-    default_thread_count = 10
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-l", "--list", action='store_true', help="list existing workspaces")
     parser.add_argument("-i", "--ignore", action='store_true', help="if workspace does not exist, then automatically"
@@ -69,11 +68,6 @@ if __name__ == "__main__":
         parser_setup = sub_parser.add_parser('setup', help='allows setting up smart file hunter')
     parser_review = sub_parser.add_parser('review', help='start file hunter console')
     parser_report = sub_parser.add_parser("report", help='obtain reports about the collected data')
-    parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')
-    parser_ftp = sub_parser.add_parser(HunterType.ftp.name, help='enumerate FTP services. note that the FTP service '
-                                                                 'must support the MLSD command')
-    parser_nfs = sub_parser.add_parser(HunterType.nfs.name, help='enumerate NFS services')
-    parser_local = sub_parser.add_parser(HunterType.local.name, help='enumerate local file system')
     # setup database parser
     parser_database.add_argument('-a', '--add',
                                  type=str,
@@ -111,89 +105,24 @@ if __name__ == "__main__":
                                help='the workspace used for the enumeration')
     parser_report.add_argument('-e', '--excel', type=str, help="write report to given excel file")
     parser_report.add_argument('-c', '--csv', action="store_true", help="print report results to stdout as CSV")
+
     # setup SMB parser
-    parser_smb.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
-    parser_smb.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
-    parser_smb.add_argument('-t', '--threads', type=int, default=default_thread_count,
-                            help='number of analysis threads')
-    parser_smb.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
-                            help='the name of the domain name of existing microsoft active directories. if specified, '
-                                 'then the specified values become additional file content matching rules with'
-                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
-                                 'user names in files.')
-    smb_target_group = parser_smb.add_argument_group('target information')
-    smb_target_group.add_argument('--host', type=str, metavar="HOST", help="the target SMB service's IP address")
-    smb_target_group.add_argument('--port', type=int, default=445, metavar="PORT",
-                                  help="the target SMB service's port")
-    smb_target_group.add_argument('--shares', type=str, nargs="*", metavar="SHARES",
-                                  help="list of shares to enumerate. if not specified, then all shares will be "
-                                       "enumerated.")
-    smb_authentication_group = parser_smb.add_argument_group('authentication')
-    smb_authentication_group.add_argument('-u', '--username', type=str,
-                                          metavar="USERNAME", help='the name of the user to use for authentication')
-    smb_authentication_group.add_argument('-d', '--domain', default=".", type=str,
-                                          metavar="DOMAIN", help='the domain to use for authentication')
-    parser_smb_credential_group = smb_authentication_group.add_mutually_exclusive_group()
-    parser_smb_credential_group.add_argument('--hash', action="store",
-                                             metavar="LMHASH:NTHASH", help='NTLM hashes, valid formats are'
-                                                                           'LMHASH:NTHASH or NTHASH')
-    parser_smb_credential_group.add_argument('-p', '--password', action="store",
-                                             metavar="PASSWORD", help='password of given user')
-    parser_smb_credential_group.add_argument('-P', dest="prompt_for_password", action="store_true",
-                                             help='ask for the password via an user input prompt')
-    parser_smb_credential_group.add_argument('-H', dest="prompt_for_hash", action="store_true",
-                                             help='ask for the hash via an user input prompt')
+    parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')
+    SmbSensitiveFileHunter.add_argparse_arguments(parser_smb)
+
     # setup FTP parser
-    parser_ftp.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
-    parser_ftp.add_argument('--tls', action="store_true", help='use TLS')
-    parser_ftp.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
-    parser_ftp.add_argument('-t', '--threads', type=int, default=default_thread_count,
-                            help='number of analysis threads')
-    parser_ftp.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
-                            help='the name of the domain name of existing microsoft active directories. if specified, '
-                                 'then the specified values become additional file content matching rules with'
-                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
-                                 'user names in files.')
-    ftp_target_group = parser_ftp.add_argument_group('target information')
-    ftp_target_group.add_argument('--host', type=str, metavar="HOST", help="the target FTP service's IP address")
-    ftp_target_group.add_argument('--port', type=int, default=21, metavar="PORT",
-                                  help="the target FTP service's port")
-    ftp_authentication_group = parser_ftp.add_argument_group('authentication')
-    ftp_authentication_group.add_argument('-u', '--username', action="store", default='',
-                                          metavar="USERNAME", help='the name of the user to use for authentication')
-    parser_ftp_credential_group = ftp_authentication_group.add_mutually_exclusive_group()
-    parser_ftp_credential_group.add_argument('-p', '--password', action="store", default='',
-                                             metavar="PASSWORD", help='password of given user')
-    parser_ftp_credential_group.add_argument('-P', dest="prompt_for_password", action="store_true",
-                                             help='ask for the password via an user input prompt')
+    parser_ftp = sub_parser.add_parser(HunterType.ftp.name,
+                                       help='enumerate FTP services. note that the FTP service must support the MLSD '
+                                            'command')
+    FtpSensitiveFileHunter.add_argparse_arguments(parser_ftp)
+
     # setup NFS parser
-    parser_nfs.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
-    parser_nfs.add_argument('--version', type=int, choices=[3, 4], default=3, help='NFS version to use')
-    parser_nfs.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
-    parser_nfs.add_argument('-t', '--threads', type=int, default=default_thread_count,
-                            help='number of analysis threads')
-    parser_nfs.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
-                            help='the name of the domain name of existing microsoft active directories. if specified, '
-                                 'then the specified values become additional file content matching rules with'
-                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
-                                 'user names in files.')
-    nfs_target_group = parser_nfs.add_argument_group('target information')
-    nfs_target_group.add_argument('--host', type=str, metavar="HOST", help="the target NFS service's IP address")
-    nfs_target_group.add_argument('--port', type=int, default=2049, metavar="PORT",
-                                  help="the target NFS service's port")
-    nfs_target_group.add_argument('--path', type=str, metavar="PATH", help="path to enumerate")
+    parser_nfs = sub_parser.add_parser(HunterType.nfs.name, help='enumerate NFS services')
+    NfsSensitiveFileHunter.add_argparse_arguments(parser_nfs)
+
     # setup local parser
-    parser_local.add_argument('-w', '--workspace', type=str, required=True,
-                              help='the workspace used for the enumeration')
-    parser_local.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
-    parser_local.add_argument('-t', '--threads', type=int, default=default_thread_count,
-                              help='number of analysis threads')
-    parser_local.add_argument('path', nargs="+", help='directories to enumerate')
-    parser_local.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
-                              help='the name of the domain name of existing microsoft active directories. if specified, '
-                                   'then the specified values become additional file content matching rules with'
-                                   'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
-                                   'user names in files.')
+    parser_local = sub_parser.add_parser(HunterType.local.name, help='enumerate local file system')
+    LocalSensitiveFileHunter.add_argparse_arguments(parser_local)
     args = parser.parse_args()
     
     level = logging.DEBUG if args.debug else logging.INFO

@@ -1,0 +1,8 @@
+<Server port="18005" shutdown="SHUTDOWN">
+  <GlobalNamingResources >
+    <Resource name="jdbc/TEST" auth="Container"
+              type="javax.sql.DataSource" username="postgres" password="postgres"
+              driverClassName="org.postgresql.Driver" url="jdbc:postgresql://localhost:5432/test"
+              maxActive="100" maxIdle="30" maxWait="10000" factory="org.apache.commons.dbcp.BasicDataSourceFactory" />
+  </GlobalNamingResources >
+</Server>

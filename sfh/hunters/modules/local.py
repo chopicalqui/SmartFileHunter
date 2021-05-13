@@ -45,6 +45,21 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
         super().__init__(args, address="127.0.0.1", service_name=HunterType.local, **kwargs)
         self.path = [os.path.abspath(item) for item in args.path]
 
+    @staticmethod
+    def add_argparse_arguments(parser: argparse.ArgumentParser) -> None:
+        """
+        This method initializes command line arguments that are required by the current module.
+        :param parser: The argument parser to which the required command line arguments shall be added.
+        :return:
+        """
+        BaseSensitiveFileHunter.add_argparse_arguments(parser)
+        parser.add_argument('path', nargs="+", help='directories to enumerate')
+        parser.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
+                            help='the name of the domain name of existing microsoft active directories. if specified, '
+                                 'then the specified values become additional file content matching rules with'
+                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
+                                 'user names in files.')
+
     def _enumerate(self) -> None:
         """
         This method enumerates all files on the given service.

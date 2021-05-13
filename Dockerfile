@@ -30,7 +30,8 @@ RUN pip install -r requirements.txt
 RUN rm -f requirements.txt
 
 # Do cleanups
-RUN apt-get -y autoremove && \
+RUN apt remove -y gcc && \
+    apt-get -y autoremove && \
     apt-get clean
 
 # ENTRYPOINT ["bash"]
