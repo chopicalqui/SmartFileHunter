@@ -366,21 +366,3 @@ class TestMatchRule(BaseDataModelTestCase):
             self.assertEqual(MatchRuleAccuracy.high, file_match.accuracy)
             self.assertEqual(".*", file_match.search_pattern)
             self.assertEqual(30003, file_match.priority)
-
-    def test_highlight_text(self):
-        text = b"""# Oracle DB properties
-#jdbc.driver=oracle.jdbc.driver.OracleDriver
-#jdbc.url=jdbc:oracle:thin:@localhost:1571:MyDbSID
-#jdbc.username=root
-#jdbc.password=admin
-
-# MySQL DB properties
-jdbc.driver=com.mysql.jdbc.Driver
-jdbc.url=jdbc:mysql://localhost:3306/MyDbName
-jdbc.username=root
-jdbc.password=admin"""
-        rule = MatchRule(search_location=SearchLocation.file_content,
-                         search_pattern="jdbc\.password\s*[=:]?",
-                         relevance=FileRelevance.high)
-        text, hits = rule.highlight_text(text)
-        self.assertEqual(2, hits)

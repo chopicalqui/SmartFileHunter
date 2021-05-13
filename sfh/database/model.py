@@ -280,6 +280,7 @@ class File(DeclarativeBase):
         color_code = lambda x: colored(x, "red",  attrs=['bold'])
         result = ""
         current_position = 0
+        markers.sort()
         for i, j in markers:
             result += text[current_position:i]
             result += color_code(text[i:j])
@@ -494,28 +495,30 @@ class MatchRule(DeclarativeBase):
         :param text: The text that is searched.
         :param known_markers: Markers that have previously already identified.
         """
-        result = []
+        result = list(known_markers)
         if self.search_pattern_re_text is not None and text:
             for item in self.search_pattern_re_text.finditer(text):
                 if known_markers:
-                    for i, j in item.regs:
-                        for k, m in known_markers:
-                            if i <= k and j >= m and (i, j) not in result:
-                                result.append((i, j))
-                            elif k <= i <= m and k <= j <= m and (k, m) not in result:
-                                result.append((k, m))
-                            elif k <= i <= m and j >= m and (k, j) not in result:
-                                result.append((k, j))
-                            elif i <= k and k <= j <= m and (i, m) not in result:
-                                result.append((i, m))
-                            else:
-                                if (k, m) not in result:
-                                    result.append((k, m))
-                                if (i, j) not in result:
-                                    result.append((i, j))
+                    for new_index in range(0, len(item.regs)):
+                        i, j = item.regs[new_index]
+                        for current_index in range(0, len(result)):
+                            k, m = result[current_index]
+                            if i <= k and j >= m:
+                                result[current_index] = (i, j)
+                                break
+                            elif k <= i <= m and k <= j <= m:
+                                break
+                            elif k <= i <= m and j >= m:
+                                result[current_index] = (k, j)
+                                break
+                            elif i <= k and k <= j <= m:
+                                result[current_index] = (i, m)
+                                break
+                        else:
+                            result.append((i, j))
                 elif item.regs:
                     result.extend(item.regs)
-        return result if result else known_markers
+        return result
 
     def get_text(self, color: bool = False) -> str:
         """

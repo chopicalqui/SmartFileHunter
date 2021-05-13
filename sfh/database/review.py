@@ -211,7 +211,7 @@ class ReviewConsole(Cmd):
                     else:
                         print("file not found")
             except Exception as ex:
-                pass
+                print(ex)
 
     def help_export(self):
         print('export the current file to the given file (e.g., export /tmp/file.txt)')
@@ -297,68 +297,80 @@ If both are omitted, print options that are currently set.""")
         if len(arguments) == 1 and arguments[0] and arguments[0] in [item.name for item in DistributionType]:
             argument = DistributionType[arguments[0]]
             if argument == DistributionType.result:
-                with self._engine.session_scope() as session:
-                    q = session.query(File.review_result, func.count(File.id)) \
-                        .group_by(File.review_result) \
-                        .order_by(File.review_result)
-                    df = pandas.read_sql(q.statement, q.session.bind)
-                    df["review_result"] = df["review_result"].apply(lambda x: x.name if x else x)
-                    print(df)
+                try:
+                    with self._engine.session_scope() as session:
+                        q = session.query(File.review_result, func.count(File.id)) \
+                            .group_by(File.review_result) \
+                            .order_by(File.review_result)
+                        df = pandas.read_sql(q.statement, q.session.bind)
+                        df["review_result"] = df["review_result"].apply(lambda x: x.name if x else x)
+                        print(df)
+                except Exception as ex:
+                    print(ex)
             elif argument == DistributionType.relevance:
-                with self._engine.session_scope() as session:
-                    q = session.query(MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
-                        .join((File, MatchRule.files)) \
-                        .join((Workspace, File.workspace)) \
-                        .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
-                                                                           self._options[ConsoleOption.filter]))) \
-                        .group_by(MatchRule._relevance, MatchRule._accuracy) \
-                        .order_by(MatchRule._relevance, MatchRule._accuracy)
-                    df = pandas.read_sql(q.statement, q.session.bind)
-                    df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
-                    df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
-                    print(pandas.pivot_table(df,
-                                             index="relevance",
-                                             columns="accuracy",
-                                             values="count_1",
-                                             aggfunc=numpy.sum,
-                                             fill_value=0))
+                try:
+                    with self._engine.session_scope() as session:
+                        q = session.query(MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
+                            .join((File, MatchRule.files)) \
+                            .join((Workspace, File.workspace)) \
+                            .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
+                                                                               self._options[ConsoleOption.filter]))) \
+                            .group_by(MatchRule._relevance, MatchRule._accuracy) \
+                            .order_by(MatchRule._relevance, MatchRule._accuracy)
+                        df = pandas.read_sql(q.statement, q.session.bind)
+                        df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
+                        df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
+                        print(pandas.pivot_table(df,
+                                                 index="relevance",
+                                                 columns="accuracy",
+                                                 values="count_1",
+                                                 aggfunc=numpy.sum,
+                                                 fill_value=0))
+                except Exception as ex:
+                    print(ex)
             elif argument == DistributionType.extension:
-                with self._engine.session_scope() as session:
-                    q = session.query(Path.extension, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
-                        .join((File, Path.file)) \
-                        .join((MatchRule, File.matches)) \
-                        .join((Workspace, File.workspace)) \
-                        .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
-                                                                           self._options[ConsoleOption.filter]))) \
-                        .group_by(Path.extension, MatchRule._relevance, MatchRule._accuracy) \
-                        .order_by(MatchRule._relevance, MatchRule._accuracy)
-                    df = pandas.read_sql(q.statement, q.session.bind)
-                    df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
-                    df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
-                    print(pandas.pivot_table(df,
-                                             index="extension",
-                                             columns=["relevance", "accuracy"],
-                                             values="count_1",
-                                             aggfunc=numpy.sum,
-                                             fill_value=0))
+                try:
+                    with self._engine.session_scope() as session:
+                        q = session.query(Path.extension, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
+                            .join((File, Path.file)) \
+                            .join((MatchRule, File.matches)) \
+                            .join((Workspace, File.workspace)) \
+                            .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
+                                                                               self._options[ConsoleOption.filter]))) \
+                            .group_by(Path.extension, MatchRule._relevance, MatchRule._accuracy) \
+                            .order_by(MatchRule._relevance, MatchRule._accuracy)
+                        df = pandas.read_sql(q.statement, q.session.bind)
+                        df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
+                        df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
+                        print(pandas.pivot_table(df,
+                                                 index="extension",
+                                                 columns=["relevance", "accuracy"],
+                                                 values="count_1",
+                                                 aggfunc=numpy.sum,
+                                                 fill_value=0))
+                except Exception as ex:
+                    print(ex)
             elif argument == DistributionType.mimetype:
-                with self._engine.session_scope() as session:
-                    q = session.query(File.mime_type, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
-                        .join((MatchRule, File.matches)) \
-                        .join((Workspace, File.workspace)) \
-                        .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
-                                                                           self._options[ConsoleOption.filter]))) \
-                        .group_by(File.mime_type, MatchRule._relevance, MatchRule._accuracy) \
-                        .order_by(MatchRule._relevance, MatchRule._accuracy)
-                    df = pandas.read_sql(q.statement, q.session.bind)
-                    df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
-                    df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
-                    print(pandas.pivot_table(df,
-                                             index="mime_type",
-                                             columns=["relevance", "accuracy"],
-                                             values="count_1",
-                                             aggfunc=numpy.sum,
-                                             fill_value=0))
+                try:
+                    with self._engine.session_scope() as session:
+                        q = session.query(File.mime_type, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
+                            .join((MatchRule, File.matches)) \
+                            .join((Workspace, File.workspace)) \
+                            .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
+                                                                               self._options[ConsoleOption.filter]))) \
+                            .group_by(File.mime_type, MatchRule._relevance, MatchRule._accuracy) \
+                            .order_by(MatchRule._relevance, MatchRule._accuracy)
+                        df = pandas.read_sql(q.statement, q.session.bind)
+                        df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
+                        df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
+                        print(pandas.pivot_table(df,
+                                                 index="mime_type",
+                                                 columns=["relevance", "accuracy"],
+                                                 values="count_1",
+                                                 aggfunc=numpy.sum,
+                                                 fill_value=0))
+                except Exception as ex:
+                    print(ex)
             else:
                 raise NotImplementedError("case not implemented")
         else:
