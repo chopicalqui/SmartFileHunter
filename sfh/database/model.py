@@ -270,19 +270,37 @@ class File(DeclarativeBase):
         """
         return hashlib.sha256(content).hexdigest()
 
-    def get_text(self, color: bool = False, match_rules = [], threshold: int = 0) -> List[str]:
+    @staticmethod
+    def apply_highlights(text: str, markers: list) -> str:
+        """
+        This method color-codes the text based on the given marker ranges.
+        """
+        if not markers:
+            return text
+        color_code = lambda x: colored(x, "red",  attrs=['bold'])
+        result = ""
+        current_position = 0
+        for i, j in markers:
+            result += text[current_position:i]
+            result += color_code(text[i:j])
+            current_position = j
+        result += text[current_position:]
+        return result
+
+    def get_text(self, color: bool = False, match_rules: list = [], threshold: int = 0) -> List[str]:
         """
         This method returns the details about the review.
         """
         result = []
-        hits_total = 0
+        markers = []
         print_bold = lambda x: colored(x, attrs=['bold']) if color else x
         review_result = self.review_result_with_color_str if color else self.review_result_str
         try:
             content = self.content.decode("utf-8")
             for item in match_rules:
-                content, hits = item.highlight_text(content)
-                hits_total += hits
+                markers = item.get_text_markers(content, markers)
+            if color:
+                content = self.apply_highlights(content, markers)
             result.append(content)
         except:
             try:
@@ -309,9 +327,9 @@ class File(DeclarativeBase):
         if self.comment:
             result.append("{}       {}".format(print_bold("Comment"), self.comment))
         if color:
-            result.append("{}          {}".format(print_bold("Hits"), colored(hits_total, "red", attrs=["bold"])))
+            result.append("{}          {}".format(print_bold("Hits"), colored(len(markers), "red", attrs=["bold"])))
         else:
-            result.append("{}          {}".format(print_bold("Hits"), hits_total))
+            result.append("{}          {}".format(print_bold("Hits"), len(markers)))
         return result
 
 
@@ -469,20 +487,35 @@ class MatchRule(DeclarativeBase):
                                                          self.accuracy.name,
                                                          self.search_pattern)
 
-    def highlight_text(self, text: str, color: bool = False) -> tuple:
+    def get_text_markers(self, text: str, known_markers: list = []) -> list:
         """
-        Highlights the matched text in the given text
+        This method determines searches the given text for a matches and returns a list of tuples documenting the
+        locations where the matches started and stopped.
+        :param text: The text that is searched.
+        :param known_markers: Markers that have previously already identified.
         """
-        hits = 0
+        result = []
         if self.search_pattern_re_text is not None and text:
-            offset = 0
             for item in self.search_pattern_re_text.finditer(text):
-                for i, j in item.regs:
-                    hits += 1
-                    if color:
-                        text = text[:i] + colored(text[i:j], color="red", attrs=["bold"]) + text[j:]
-                    offset += 1
-        return (text, hits)
+                if known_markers:
+                    for i, j in item.regs:
+                        for k, m in known_markers:
+                            if i <= k and j >= m and (i, j) not in result:
+                                result.append((i, j))
+                            elif k <= i <= m and k <= j <= m and (k, m) not in result:
+                                result.append((k, m))
+                            elif k <= i <= m and j >= m and (k, j) not in result:
+                                result.append((k, j))
+                            elif i <= k and k <= j <= m and (i, m) not in result:
+                                result.append((i, m))
+                            else:
+                                if (k, m) not in result:
+                                    result.append((k, m))
+                                if (i, j) not in result:
+                                    result.append((i, j))
+                elif item.regs:
+                    result.extend(item.regs)
+        return result if result else known_markers
 
     def get_text(self, color: bool = False) -> str:
         """

@@ -131,7 +131,7 @@ class ReviewConsole(Cmd):
             id = self._file_ids[self._cursor_id - 1]
             with self._engine.session_scope() as session:
                 file = session.query(File).filter_by(id=id).one_or_none()
-                rules = session.query(MatchRule).filter_by(search_location=SearchLocation.file_content)
+                rules = session.query(MatchRule).filter_by(_search_location=SearchLocation.file_content.value).all()
                 if file:
                     result = file.get_text(color=not self._args.nocolor,
                                            match_rules=rules,
