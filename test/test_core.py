@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import unittest
+from database.model import Path
 from config.config import FileHunter as FileHunterConfig
 
 
@@ -42,3 +43,45 @@ class TestFileHunterConfig(unittest.TestCase):
                 if priority:
                     self.assertLessEqual(rule.priority, priority)
                 priority = rule.priority
+
+
+class TestFileSizeThreshold(unittest.TestCase):
+    """
+    this method determines whether the file size thresholds are correctly determined.
+    """
+
+    def __init__(self, test_name: str):
+        super().__init__(test_name)
+        self._config = FileHunterConfig()
+
+    def test_zip_file_below_threshold(self):
+        result = self._config.is_below_threshold(path=Path(full_path="/tmp/test.zip"),
+                                                 file_size=self._config.archive_threshold - 1)
+        self.assertTrue(result)
+
+    def test_zip_file_above_threshold(self):
+        result = self._config.is_below_threshold(path=Path(full_path="/tmp/test.zip"),
+                                                 file_size=self._config.archive_threshold + 1)
+        self.assertFalse(result)
+
+    def test_zip_file_above_threshold_but_threshold_deactivated(self):
+        self._config.archive_threshold = 0
+        result = self._config.is_below_threshold(path=Path(full_path="/tmp/test.zip"),
+                                                 file_size=10000000000)
+        self.assertTrue(result)
+
+    def test_file_below_threshold(self):
+        result = self._config.is_below_threshold(path=Path(full_path="/tmp/test.txt"),
+                                                 file_size=self._config.threshold - 1)
+        self.assertTrue(result)
+
+    def test_file_above_threshold(self):
+        result = self._config.is_below_threshold(path=Path(full_path="/tmp/test.txt"),
+                                                 file_size=self._config.threshold + 1)
+        self.assertFalse(result)
+
+    def test_file_above_threshold_but_threshold_deactivated(self):
+        self._config.threshold = 0
+        result = self._config.is_below_threshold(path=Path(full_path="/tmp/test.txt"),
+                                                 file_size=10000000000)
+        self.assertTrue(result)

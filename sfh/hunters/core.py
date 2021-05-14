@@ -58,11 +58,11 @@ class BaseAnalyzer(Thread):
         self.workspace = args.workspace
         self.config = config
 
-    def is_file_size_below_threshold(self, size: int) -> bool:
+    def is_file_size_below_threshold(self, path: Path, size: int) -> bool:
         """
         This method determines if the given file size in bytes is below the configured threshold.
         """
-        return size > 0 and (self.config.threshold <= 0 or size <= self.config.threshold)
+        return self.config.is_below_threshold(path, size)
 
     def add_content(self, path: Path, rule: MatchRule = None, file: File = None):
         """
@@ -124,10 +124,19 @@ class BaseAnalyzer(Thread):
         :return: True if file is of relevance
         """
         result = None
-        for rule in self.config.matching_rules[SearchLocation.file_name.name]:
+        # First we search the full path
+        for rule in self.config.matching_rules[SearchLocation.full_path.name]:
             if rule.is_match(path):
                 logger.info("Match: {} ({})".format(str(path), rule.get_text(not self._args.nocolor)))
                 result = rule.relevance
                 self.add_content(rule=rule, path=path)
                 break
+        else:
+            # If nothing is found, then we search the file name
+            for rule in self.config.matching_rules[SearchLocation.file_name.name]:
+                if rule.is_match(path):
+                    logger.info("Match: {} ({})".format(str(path), rule.get_text(not self._args.nocolor)))
+                    result = rule.relevance
+                    self.add_content(rule=rule, path=path)
+                    break
         return result

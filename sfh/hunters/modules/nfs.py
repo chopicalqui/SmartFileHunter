@@ -91,7 +91,7 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                                 access_time=datetime.fromtimestamp(stats['atime']['sec'], tz=timezone.utc),
                                 modified_time=datetime.fromtimestamp(stats['mtime']['sec'], tz=timezone.utc),
                                 creation_time=datetime.fromtimestamp(stats['ctime']['sec'], tz=timezone.utc))
-                    if self.is_file_size_below_threshold(file_size):
+                    if self.is_file_size_below_threshold(path, file_size):
                         content = self.client.open(full_path, mode='rb').read()
                         path.file = File(content=bytes(content))
                         # Add file to queue

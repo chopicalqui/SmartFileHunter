@@ -192,7 +192,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                                     access_time=datetime.datetime.utcfromtimestamp(item.get_atime_epoch()),
                                     modified_time=datetime.datetime.utcfromtimestamp(item.get_mtime_epoch()),
                                     creation_time=datetime.datetime.utcfromtimestamp(item.get_ctime_epoch()))
-                        if self.is_file_size_below_threshold(file_size):
+                        if self.is_file_size_below_threshold(path, file_size):
                             try:
                                 # Obtain file content
                                 with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:

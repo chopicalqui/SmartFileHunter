@@ -389,7 +389,7 @@ exit 0""")
             self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
             self.assertEqual("[a-z0-9]*password[a-z0-9]*\\s*[=:><\"',]", result.search_pattern)
 
-    def test_connection_string(self):
+    def test_connection_string_xml(self):
         self.init_db()
         # Analyze given data
         self._add_file_content(workspace="test",
@@ -408,6 +408,80 @@ exit 0""")
             self.assertEqual(FileRelevance.high, result.relevance)
             self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
             self.assertEqual("connectionString=[\"'].*password\\s*=", result.search_pattern)
+
+    def test_connection_string_json(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\appsettings.json",
+                               txt_content="""{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost\\SQLEXPRESS;Database=DB;User Id=DBUser;Password=[REDACTED];Integrated Security=False;MultipleActiveResultSets=True"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  },
+  "AllowedHosts": "*",
+  "StaticFiles": {
+    "Headers": {
+      "Cache-Control": "max-age=3600",
+      "Pragma": "cache",
+      "Expires": null
+    }
+  }
+}""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("Connection[\"']\\s*:\\s*[\"'].*?password\\s*=", result.search_pattern)
+
+    def test_cpassword(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="\\DC01\\SYSVOL\\..\\Machine\\Preferences\\Groups.xml",
+                               txt_content="""<?xml version="1.0" encoding="utf-8" ?>
+<Groups clsid="{[REDACTED]}">
+  <User clsid="{[REDACTED]}" name="admin" image="0" changed="2018-12-31 07:00:00" uid="{[REDACTED]}">
+    <Properties action="C" fullName="admin" description="" cpassword="qRI/NPQtItGsMjwMkhF7ZDvK6n9KlOhBZ/XShO2IZ80" changeLogon="0" noChange="0" neverExpires="0" acctDisabled="0" userName="admin" />
+  </User>
+</Groups>""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("<properties\\s.*?\\scpassword=[\"'].*[\"'].*?/>", result.search_pattern)
+
+    def test_autologin(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="\\DC01\\SYSVOL\\..\\Machine\\Preferences\\Registry.xml",
+                               txt_content="""<?xml version="1.0" encoding="utf-8"?>
+<RegistrySettings clsid="{A3CCFC41-DFDB-43a5-8D26-0FE8B954DA51}"><Registry clsid="{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}" name="AutoAdminLogon" status="AutoAdminLogon" image="7" changed="2021-05-13 19:40:35" uid="{7DA1B569-F1F6-4521-8135-DA796D27B750}"><Properties action="U" displayDecimal="1" default="0" hive="HKEY_LOCAL_MACHINE" key="SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" name="AutoAdminLogon" type="REG_SZ" value="1"/></Registry>
+	<Registry clsid="{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}" name="DefaultDomainName" status="DefaultDomainName" image="7" changed="2021-05-13 19:41:06" uid="{4F4F208A-F33B-441C-B288-D76A291DAB47}"><Properties action="U" displayDecimal="1" default="0" hive="HKEY_LOCAL_MACHINE" key="SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" name="DefaultDomainName" type="REG_SZ" value="TEST"/></Registry>
+	<Registry clsid="{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}" name="DefaultUserName" status="DefaultUserName" image="7" changed="2021-05-13 19:41:39" uid="{9122F660-7ADF-410F-A8FC-EAD1CA0AFAE3}"><Properties action="U" displayDecimal="1" default="0" hive="HKEY_LOCAL_MACHINE" key="SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" name="DefaultUserName" type="REG_SZ" value="AutoUser"/></Registry>
+	<Registry clsid="{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}" name="DefaultPassword" status="DefaultPassword" image="7" changed="2021-05-13 19:42:01" uid="{C15A6EE5-F6D0-4FC5-B29E-39EBF7780C04}"><Properties action="U" displayDecimal="1" default="0" hive="HKEY_LOCAL_MACHINE" key="SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" name="DefaultPassword" type="REG_SZ" value="[REDACTED]"/></Registry>
+</RegistrySettings>""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("<registry\\s.*?\\skey=[\"']SOFTWARE\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon[\"'].*/>", result.search_pattern)
 
 
 class TestFileName(BaseTestFileAnalyzer):
@@ -430,20 +504,22 @@ class TestFileName(BaseTestFileAnalyzer):
             self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
             self.assertEqual("^tomcat-users(-\\d+)?\\.xml$", result.search_pattern)
 
-    def test_tomcat_users9(self):
+    def test_startup_script_machine(self):
         self.init_db()
         # Analyze given data
         self._add_file_content(workspace="test",
-                               full_path="/var/www/html/tomcat-users-7.xml",
-                               txt_content="")
+                               full_path="\\\\DC1\\...\\{xyz}\\Machine\\Scripts\\scripts.ini",
+                               txt_content="""[Startup]
+0CmdLine=AutoLogin.bat
+0Parameters=DOMAIN Administrator MySecret""")
         # Verify database
         with self._engine.session_scope() as session:
             result = session.query(MatchRule) \
                 .join(File, MatchRule.files).one()
-            self.assertEqual(SearchLocation.file_name, result.search_location)
-            self.assertEqual(FileRelevance.high, result.relevance)
-            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
-            self.assertEqual("^tomcat-users(-\\d+)?\\.xml$", result.search_pattern)
+            self.assertEqual(SearchLocation.full_path, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("^.*/((Machine)|(User))/Scripts/(ps)?scripts\\.ini$", result.search_pattern)
 
     def test_tomcat_users9(self):
         self.init_db()

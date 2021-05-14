@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Groups clsid="{[REDACTED]}">
+  <User clsid="{[REDACTED]}" name="admin" image="0" changed="2018-12-31 07:00:00" uid="{[REDACTED]}">
+    <Properties action="C" fullName="admin" description="" cpassword="qRI/NPQtItGsMjwMkhF7ZDvK6n9KlOhBZ/XShO2IZ80" changeLogon="0" noChange="0" neverExpires="0" acctDisabled="0" userName="admin" />
+  </User>
+</Groups>

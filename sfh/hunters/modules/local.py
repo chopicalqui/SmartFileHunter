@@ -75,7 +75,7 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
                                 access_time=datetime.fromtimestamp(stats.st_atime, tz=timezone.utc),
                                 modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
                                 creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc))
-                    if self.is_file_size_below_threshold(stats.st_size):
+                    if self.is_file_size_below_threshold(path, stats.st_size):
                         try:
                             with open(item, "rb") as file:
                                 content = file.read()

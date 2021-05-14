@@ -80,6 +80,7 @@ class FileHunter(BaseConfig):
         self.matching_rules = {}
         self.supported_archives = []
         self.threshold = self.get_config_int("general", "max_file_size_bytes")
+        self.archive_threshold = self.get_config_int("general", "max_archive_size_bytes")
         self.kali_packages = json.loads(self.get_config_str("setup", "kali_packages"))
         self.scripts = json.loads(self.get_config_str("setup", "scripts"))
         for match_rule in json.loads(self.get_config_str("general", "match_rules")):
@@ -111,6 +112,14 @@ class FileHunter(BaseConfig):
         """
         return path and path.extension and path.extension.lower() in self.supported_archives
 
+    def is_below_threshold(self, path, file_size: int) -> bool:
+        """
+        This method determines if the given file size in bytes is below the configured threshold.
+        """
+        is_archive = self.is_archive(path)
+        return file_size > 0 and ((is_archive and (self.archive_threshold <= 0 or
+                                                   file_size <= self.archive_threshold)) or
+                                  (not is_archive and (self.threshold <= 0 or file_size <= self.threshold)))
 
 class BaseDatabase(BaseConfig):
     """

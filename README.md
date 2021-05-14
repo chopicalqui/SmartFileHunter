@@ -1,17 +1,19 @@
 # Smart File Hunter
 
 Smart File Hunter's (SFH) objective is the efficient identification of files, which contain potential sensitive
-information like passwords, private keys, virtual machines, etc. Thereby, SFH supports searching the following sources:
+information like passwords or private keys to escalate privileges within a network. Thereby, SFH supports searching
+the following sources:
  - File Transfer Protocol (FTP) services
  - Network File System (NFS) services
  - Samba Message Block (SMB) network shares
- - Local directories
+ - Local file system
 
 ![](media/intro.gif)
 
 In addition, it provides a review platform, which allows the analysis and classification of the identified files into
 relevant and irrelevant. Finally, for reporting purposes, the identified relevant files can be exported into a CSV or
-Microsoft Excel file. The process is documented in the following figure:
+Microsoft Excel file, which shall aid in the efficient reporting of identified files. The process is documented in
+the following figure:
 
 ![SFH process](media/overview.png "SFH's collection, review, and reporting process.")
 
@@ -44,8 +46,7 @@ In order to use SFH in a Docker environment, follow the following configuration 
     ```
  
  - **[optional]** If you want to use PostgreSQL (default is SQLite), then you have to set it up first. In addition,
- you have to update the following configuration items in
- [database.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/database.config):
+ you have to update the following configuration items in [database.config](sfh/config/database.config):
    - In section `[database]`, update item `active` from `sqlite` to `postgresql`
    - In section `[postgresql_production]`, update the configuration items accordingly:
      
@@ -62,7 +63,7 @@ In order to use SFH in a Docker environment, follow the following configuration 
     ```
 
  
-### Manual Installation (export mode; you are on your own)
+### Manual Installation (not officially supported)
 
 In order to manually install SFH, the following configuration steps must be executed:
 
@@ -73,9 +74,8 @@ In order to manually install SFH, the following configuration steps must be exec
     ```
     
     Note that this step might fail because pip is not able to install the module **libnfs**. In this case, you either
-    use the Docker version or you have to manually install libnfs first (see content of
-    [Dockerfile](https://github.com/chopicalqui/SmartFileHunter/blob/main/Dockerfile) for more information) and
-    afterwards, you execute the command again.
+    use the Docker version or you have to manually install libnfs first (see content of [Dockerfile](Dockerfile)
+    for more information) and afterwards, you execute the command again.
 
  - **[mandatory]** Setup SFH. You can use the additional argument `--debug` to see the OS commands that the setup
  process is going to execute:
@@ -90,7 +90,7 @@ In order to manually install SFH, the following configuration steps must be exec
     - unrar
     - p7zip-full
     
-    If these are packages are not installed, then SFH analyzes only ZIP archives.
+    If these packages are not installed, then SFH analyzes only ZIP archives.
     
  - **[mandatory]** Setup database. You can use the additional argument `--debug` to see the OS commands that the setup
  process is going to execute:
@@ -120,19 +120,21 @@ In order to manually install SFH, the following configuration steps must be exec
 
 This section describes how SFH searches for interesting files. The search is based on so-called matching rules, which
 are described in subsection *Matching Rules*. Thereby, each file undergoes a multi-staged analysis process, which is
-described in subsection *Analysis Process*. Finally, SFH can perform this analysis process on files hosted on FTP,
-SMB, or NFS services as well as on the local file system. The analysis process on these sources is described in
-subsection *Supported Services*.
+described in subsection *Analysis Process*.
+
+Finally, SFH can perform this analysis process on files hosted on FTP, SMB, or NFS services as well as on the local
+file system. The analysis process on these sources is described in subsection *Supported Services*.
 
 ### Matching Rules
+
 SFH performs searches based on rules, which are defined in the configuration file
-[hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/hunter.config). Each rule has
+[hunter.config](sfh/config/hunter.config). Each rule has
 the following attributes:
  - **search_location**: This attribute specifies whether the **search_pattern** (see below) is applied on the file's
- name or the file's content.
+ full path, file's name, or the file's content.
   - **search_pattern**: A [Python3 regular expression](https://docs.python.org/3/library/re.html) which, depending on
- the **search_location** is either applied on the file's name or content. Note that all search patters are case
- insensitive and that the search patterns on file contents also work on binary files, which for example allows the
+ the **search_location** is either applied on the file's full path, name, or content. Note that all search patters are
+ case insensitive and that the search patterns on file contents also work on binary files, which for example allows the
  identification of sensitive information (e.g., connection strings) in application files (e.g., `.exe`).
  - **category**: A rule might belong to a category, which allows the automatic categorization of files that match the
  rule. Examples of categories are: Java files (e.g., `.war`), Configuration files (e.g., `.config`),
@@ -149,8 +151,8 @@ the following attributes:
    SQL Server backups, whereas the search pattern `^.*\\.bak` just specifies a potential backup file based on the file
    extension.
 
-**I recommend reviewing the existing matching rules to gain a better understanding of what files SFH might identify.
-Feedback for additional rules is always welcome!**
+**We recommend reviewing the existing matching rules to gain a better understanding about the files that SFH is able
+to identify. Feedback for additional rules is always welcome.**
 
 SFH applies the matching rules in a specific order. The order is based on a priority (rules with a priority come
 first), which SFH automatically computes per rule by applying the following formula (`A` and `B`, where `A > B`, are
@@ -164,25 +166,25 @@ length):
 SFH recursively searches the given service (see next subsections) for relevant files. Thereby, it also
 recursively extracts and analyzes the contents of archive files like ZIP, TAR, BZ2, etc. Which archives are
 analyzed, is specified by the list ``supported_archives``, which is located in the configuration file
-[hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/hunter.config).
+[hunter.config](sfh/config/hunter.config).
 
 For each identified file, SFH performs the following analysis steps:
-  1. SFH determines the file's size and compares it to the internal threshold ``max_file_size_bytes``, which is located
-  in configuration file
-  [hunter.config](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/config/hunter.config). You can
-  deactivate the threshold by setting ``max_file_size_bytes`` to 0. Nevertheless, I do not recommend this configuration
-  (see point 2).
-  2. If the file's size is above this threshold (default is 67108864 bytes), then SFH does not download the file for
-  the following reasons:
+  1. SFH determines whether the file is an archive file or not by comparing the file's extension to the list
+  ``supported_archives``. If it is an archive file, then it compares the file's size to the internal threshold
+  ``max_archive_size_bytes`` (default 67108864), else to the internal threshold ``max_file_size_bytes`` (default 24576).
+  Both thresholds are stored in configuration file [hunter.config](sfh/config/hunter.config). You can deactivate the
+  thresholds by setting them to 0. Nevertheless, we do not recommend this configuration (see point 2).
+  2. If the file's size is above the respective threshold, then SFH does not download the file for the following
+  reasons:
      - Speed up the analysis process.
      - Minimize impact on network performance.
-     - Minimize impact on local memory and computation performance.
-  As a result, SFH can only analyze the file name (including file extension) by applying the matching rules for
-  file names (see **search_location** attribute in the previous section) to determine the file's potential relevance.
-  If there is a match, then SFH stores the file path (without the file content) together with the matched rule in
-  the database.
-  3. If the file's size is below the threshold, then SFH downloads the file. Afterwards, it checks whether the file
-  already exists in the database (based on the file content's SHA256 value):
+     - Minimize impact on local storage and computation performance.
+  In this case, SFH can only analyze the file's full path and name (including file extension) by applying the matching
+  rules for full paths and file names (see **search_location** attribute in the previous section) to determine the
+  file's potential relevance. If there is a match, then SFH stores the file path (without the file content) together
+  with the matched rule in the database.
+  3. If the file's size is below the respective threshold, then SFH downloads the file. Afterwards, it checks whether
+  the file already exists in the database (based on the file content's SHA256 value):
 
      a. If it exists, then SFH just adds the current path to the database and continues with the next file.
      
@@ -190,16 +192,20 @@ For each identified file, SFH performs the following analysis steps:
      search is stopped and SFH stores the file path together with the file content and the matched rule in the
      database for later review.
      
-     c. If the file content did not match any match rule in Point 3b, then SFH applies the file name matching rules
+     c. If the file content did not match any match rule in Point 3b, then SFH applies the full path matching rules
+     on the file's full path. If there is a match, then SFH stores the file path together with the file content and
+     the matched rule in the database for later review.
+
+     d. If the file's full path did not match any match rule in Point 3c, then SFH applies the file name matching rules
      on the file's name. If there is a match, then SFH stores the file path together with the file content and
      the matched rule in the database for later review.
      
-  4. If the file did not match any file content and file name rules, then the file is ignored and SFH repeats the
-  process with the next file in the queue.
+  4. If the file did not match any rules, then the file is ignored and SFH repeats continues with the next file in
+  the queue.
 
 As previously described, the analysis is based on a sorted list of matching rules (match rules of a high priority come
-first, see previous section). In case of a match, it is guaranteed that the rule with the highest quality
-matched first and therefore nor further searches are required.
+first, see previous section). In case of a match, it is guaranteed that the rule with the highest relevance and
+quality matched first and therefore the search is stopped at the first hit.
 
 
 ### Supported Services
@@ -209,6 +215,7 @@ process can be applied on all files. This section describes the most important a
 
 Before you start a new engagement, you might want to re-initialize the database (arguments `--drop` and `--init`),
 which will delete all previously collected data:
+
 ```bash
 $ sudo docker-compose run smartfilehunter db --drop --init
 ```
@@ -222,15 +229,15 @@ $ sudo docker-compose run smartfilehunter db -a $ws
 
 Note that once the enumeration of a service is successfully completed, SFH marks this service as completed
 in the database. Therefore, SFH is able to remember where the collection stopped and is able to continue the
-enumeration without starting completely over again.
+enumeration without having to start completely over again.
 
 #### FTP
 
-SFH's [FTP enumeration module](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/hunters/modules/ftp.py)
-uses the Python3 library [ftplib](https://docs.python.org/3/library/ftplib.html) to communicate with FTP services.
-For the enumeration it uses the FTP command MLSD (Listings for Machine Processing), which is an extension to the
-FTP protocol specified in [RFC 2659](https://tools.ietf.org/html/rfc3659). In other words, SFH cannot enumerate FTP
-services at the moment, which do not support this command.
+SFH's [FTP enumeration module](sfh/hunters/modules/ftp.py) uses the Python3 library
+[ftplib](https://docs.python.org/3/library/ftplib.html) to communicate with FTP services. For the enumeration, it
+uses the FTP command MLSD (Listings for Machine Processing), which is an extension to the FTP protocol specified
+in [RFC 2659](https://tools.ietf.org/html/rfc3659). In other words, SFH cannot enumerate FTP services at the moment,
+which do not support this command.
 
 For more information about FTP enumeration, refer to the SFH help:
 
@@ -238,14 +245,14 @@ For more information about FTP enumeration, refer to the SFH help:
 $ sudo docker-compose run smartfilehunter ftp -h
 ```
 
-The following video shows an FTP enumeration example using
-[SFH's test data](https://github.com/chopicalqui/SmartFileHunter/tree/main/testdata):
+The following video shows an FTP enumeration example using SFH's [test data](testdata):
+
 ![](media/ftp.gif)
 
 #### NFS
 
-SFH's [NFS enumeration module](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/hunters/modules/nfs.py)
-uses the Python3 library [libnfs](https://github.com/sahlberg/libnfs-python/) to communicate with NFS services.
+SFH's [NFS enumeration module](sfh/hunters/modules/nfs.py) uses the Python3 library
+[libnfs](https://github.com/sahlberg/libnfs-python/) to communicate with NFS services.
 
 For more information about NFS enumeration, refer to the SFH help:
 
@@ -253,15 +260,15 @@ For more information about NFS enumeration, refer to the SFH help:
 $ sudo docker-compose run smartfilehunter nfs -h
 ```
 
-The following video shows an NFS enumeration example using
-[SFH's test data](https://github.com/chopicalqui/SmartFileHunter/tree/main/testdata):
+The following video shows an NFS enumeration example using SFH's [test data](testdata):
+
 ![](media/nfs.gif)
 
 #### SMB
 
-SFH's [SMB enumeration module](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/hunters/modules/smb.py)
-uses the Python3 library [impacket](https://github.com/SecureAuthCorp/impacket) to
-communicate with SMB services. Therefore, SFH supports the following authentication options:
+SFH's [SMB enumeration module](sfh/hunters/modules/smb.py) uses the Python3 library
+[impacket](https://github.com/SecureAuthCorp/impacket) to communicate with SMB services. Therefore, SFH supports the
+following authentication options:
  - Authentication via username and password
  - Authentication via username and hash
  - No authentication (SMB NULL sessions)
@@ -272,8 +279,8 @@ For more information about NFS enumeration, refer to the SFH help:
 $ sudo docker-compose run smartfilehunter smb -h
 ```
 
-The following video shows an SMB enumeration example using
-[SFH's test data](https://github.com/chopicalqui/SmartFileHunter/tree/main/testdata):
+The following video shows an SMB enumeration example using SFH's [test data](testdata):
+
 ![](media/smb.gif)
 
 
@@ -283,9 +290,7 @@ In some cases, the enumeration of local files might be necessary. Possible examp
  - After downloading large volumes of data from a web application via wget.
  - Mounting services that are not yet supported by SFH (e.g., via SSHFS).
 
-In this case, SFH's
-[local directory enumeration module](https://github.com/chopicalqui/SmartFileHunter/blob/main/sfh/hunters/modules/local.py)
-can be used.
+In this case, SFH's [local directory enumeration module](sfh/hunters/modules/local.py) can be used.
 
 For more information about local filesystem enumeration, refer to the SFH help:
 
@@ -293,8 +298,8 @@ For more information about local filesystem enumeration, refer to the SFH help:
 $ sudo docker-compose run smartfilehunter local -h
 ```
 
-The following video provides an example of a local filesystem enumeration via SSHFS using
-[SFH's test data](https://github.com/chopicalqui/SmartFileHunter/tree/main/testdata):
+The following video provides an example of a local filesystem enumeration via SSHFS using SFH's [test data](testdata):
+
 ![](media/local.gif)
 
 
@@ -341,7 +346,9 @@ Note: SFH remembers the last used command, which will be automatically repeated 
 for example, helpful, if you have a series of irrelevant files.
 
 The following video provides an example of how the review can be conducted:
+
 ![](media/review.gif)
+
 
 ## Reporting
 
@@ -354,6 +361,7 @@ $ sudo docker-compose run smartfilehunter report -h
 
 The following video provides an example CSV report about the relevant files, which were identified during the
 previous review:
+
 ![](media/report-csv.gif)
 
 

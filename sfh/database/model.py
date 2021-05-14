@@ -84,7 +84,8 @@ class MatchRuleAccuracy(enum.Enum):
 
 class SearchLocation(enum.Enum):
     file_name = 1
-    file_content = 100
+    full_path = 1000
+    file_content = 10000
 
 
 file_match_rule_mapping = Table("file_match_rule_mapping", DeclarativeBase.metadata,
@@ -454,8 +455,8 @@ class MatchRule(DeclarativeBase):
             result = len(self.search_pattern_re.findall(path.file.content)) > 0
         elif self.search_location == SearchLocation.file_name:
             result = self.search_pattern_re.match(path.file_name.encode("utf-8")) is not None
-        elif self.search_location == SearchLocation.directory_name:
-            result = self.search_pattern_re.match(path.full_pathencode("utf-8")) is not None
+        elif self.search_location == SearchLocation.full_path:
+            result = self.search_pattern_re.match(path.full_path.encode("utf-8")) is not None
         else:
             raise NotImplementedError("this case is not implemented")
         return result
