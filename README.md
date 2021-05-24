@@ -169,9 +169,9 @@ analyzed, is specified by the list ``supported_archives``, which is located in t
 [hunter.config](sfh/config/hunter.config).
 
 For each identified file, SFH performs the following analysis steps:
-  1. SFH determines whether the file is an archive file or not by comparing the file's extension to the list
+  1. SFH determines whether the file is an archive file by comparing the file's extension to the list
   ``supported_archives``. If it is an archive file, then it compares the file's size to the internal threshold
-  ``max_archive_size_bytes`` (default 67108864), else to the internal threshold ``max_file_size_bytes`` (default 24576).
+  ``max_archive_size_bytes`` (default 67108864), else to the internal threshold ``max_file_size_bytes`` (default 1048576).
   Both thresholds are stored in configuration file [hunter.config](sfh/config/hunter.config). You can deactivate the
   thresholds by setting them to 0. Nevertheless, we do not recommend this configuration (see point 2).
   2. If the file's size is above the respective threshold, then SFH does not download the file for the following
