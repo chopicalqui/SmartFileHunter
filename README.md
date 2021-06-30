@@ -98,7 +98,7 @@ In order to manually install SFH, the following configuration steps must be exec
    a. For the setup of the **SQLite** database, execute the following setup command:
  
    ```bash
-   $ filehunter setup --sqlite --tasks setup-database
+   $ sudo filehunter setup --sqlite --tasks setup-database
    ```
    
    b. For the setup of the **PostgreSQL** database, execute the following setup command. Note that this command

@@ -23,7 +23,6 @@ __version__ = 0.1
 import os
 import time
 import enum
-import passgen
 import argparse
 import subprocess
 import logging
@@ -81,7 +80,6 @@ class ManageDatabase:
         self._arguments = args
         self._hunter_config = FileHunterConfig()
         self._db_config = DatabaseFactory()
-        self._db_config.password = passgen.passgen(30)
 
     def run(self):
         if self._arguments.module == "db":
@@ -115,9 +113,11 @@ class ManageDatabase:
         setup_commands = []
         tasks = [SetupTask[item.replace("-", "_")] for item in self._arguments.tasks]
         # Update configuration file
-        if DatabaseType.postgresql.name in self._arguments:
+        if DatabaseType.postgresql.name in args_dict and args_dict[DatabaseType.postgresql.name]:
+            print("set postgresql")
             self._db_config.type = DatabaseType.postgresql.name
-        elif DatabaseType.sqlite.name in self._arguments:
+        elif DatabaseType.sqlite.name in args_dict and args_dict[DatabaseType.sqlite.name]:
+            print("set sqlite")
             self._db_config.type = DatabaseType.sqlite.name
         # Create link file
         if SetupTask.create_link_file in tasks:
@@ -134,7 +134,6 @@ class ManageDatabase:
         if SetupTask.setup_database in tasks:
             # Setup PostgreSQL database
             if DatabaseType.postgresql.name in args_dict and args_dict[DatabaseType.postgresql.name]:
-                self._db_config.type = DatabaseType.postgresql.name
                 setup_commands.append(SetupCommand(description="adding PostgresSql database to auto start",
                                                    command=["update-rc.d", "postgresql", "enable"],
                                                    return_code=0))
@@ -164,7 +163,7 @@ class ManageDatabase:
             # Setup SQLite database
             if DatabaseType.sqlite.name in args_dict and args_dict[DatabaseType.sqlite.name]:
                 self._db_config.type = DatabaseType.sqlite.name
-                if not self._hunter_config.is_docker():
+                if not self._hunter_config.is_docker() and not os.path.exists(self._hunter_config.get_home_dir()):
                     setup_commands.append(SetupCommand(description="create ~/.sfh directory for SQLite database",
                                                        command=["mkdir", self._hunter_config.get_home_dir()],
                                                        return_code=0))

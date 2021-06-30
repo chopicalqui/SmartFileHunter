@@ -503,6 +503,21 @@ exit 0""")
             self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
             self.assertEqual("<registry\\s.*?\\skey=[\"']SOFTWARE\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon[\"'].*/>", result.search_pattern)
 
+    def test_jwt(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\appsettings.json",
+                               txt_content="""{"jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual('eyJ\\w+?\\.eyJ\\w+?\\.', result.search_pattern)
+
 
 class TestFileName(BaseTestFileAnalyzer):
 

@@ -4,11 +4,8 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PIP_NO_CACHE_DIR=off
 
-# Install applications
-RUN apt-get update -y
-
 # Install nfslib
-RUN apt install -y wget cmake
+RUN apt-get update && apt-get install -y wget cmake
 RUN wget https://github.com/sahlberg/libnfs/archive/refs/tags/libnfs-4.0.0.tar.gz -O /tmp/libnfs.tar.gz
 WORKDIR /tmp
 RUN tar --extract -f /tmp/libnfs.tar.gz -C /tmp/

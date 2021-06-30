@@ -25,6 +25,7 @@ import re
 import enum
 import json
 import logging
+import passgen
 import configparser
 from database.model import MatchRule
 from database.model import FileRelevance
@@ -136,6 +137,19 @@ class BaseDatabase(BaseConfig):
         self._unittest_section = unittest_section
 
     @property
+    def type(self) -> DatabaseType:
+        result = self.get_config_str("database", "active")
+        return DatabaseType[result]
+
+    @type.setter
+    def type(self, value: str):
+        self.config["database"]["active"] = value
+
+    @property
+    def production_section(self) -> str:
+        return self._production_section
+
+    @property
     def dialect(self) -> str:
         return self.get_config_str(self._production_section, "dialect")
 
@@ -147,6 +161,8 @@ class DatabasePostgreSql(BaseDatabase):
         super().__init__(production=production,
                          production_section="postgresql_production",
                          unittest_section="postgresql_unittesting")
+        if not self.password:
+            self.password = passgen.passgen(30)
 
     @property
     def host(self) -> str:
@@ -162,7 +178,8 @@ class DatabasePostgreSql(BaseDatabase):
 
     @property
     def password(self) -> str:
-        return self.get_config_str(self._production_section, "password")
+        result= self.get_config_str(self._production_section, "password")
+        return result
 
     @password.setter
     def password(self, value: str) -> None:
@@ -250,22 +267,22 @@ class DatabaseFactory(BaseConfig):
 
     @property
     def type(self) -> str:
-        return DatabaseType[self._type]
+        return self._database.type
 
     @type.setter
     def type(self, value: str):
-        self._type = DatabaseType[value]
-        if self._type == DatabaseType.postgresql:
+        result = DatabaseType[value]
+        if result == DatabaseType.postgresql:
             self._database = DatabasePostgreSql(self.production)
-        elif self._type == DatabaseType.sqlite:
+        elif result == DatabaseType.sqlite:
             self._database = DatabaseSqlite(self.production)
         else:
             raise NotImplementedError("database type not implemented")
-        self.config["database"]["active"] = value
+        self._database.type = value
 
     @property
     def is_postgres(self) -> bool:
-        return self._type == DatabaseType.postgresql
+        return self.type == DatabaseType.postgresql
 
     @property
     def production_database(self):
@@ -300,6 +317,8 @@ class DatabaseFactory(BaseConfig):
         if self.is_postgres:
             self._database.password = value
 
+            #self.config[self._database.production_section]["password"] = value
+
     @property
     def database(self) -> str:
         result = None
@@ -314,3 +333,7 @@ class DatabaseFactory(BaseConfig):
     @property
     def connection_string(self):
         return self._database.connection_string
+
+    def write(self):
+        self._database.write()
+
