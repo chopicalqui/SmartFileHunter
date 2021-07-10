@@ -78,7 +78,7 @@ class FileHunter(BaseConfig):
 
     def __init__(self, domain_names: list = None):
         super().__init__("hunter.config")
-        self.matching_rules = {}
+        self.matching_rules = {item.name: [] for item in SearchLocation}
         self.supported_archives = []
         self.threshold = self.get_config_int("general", "max_file_size_bytes")
         self.archive_threshold = self.get_config_int("general", "max_archive_size_bytes")

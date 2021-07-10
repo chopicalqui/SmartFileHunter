@@ -68,6 +68,8 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
         for path in self.path:
             path = path if path[-1] == "/" else path + "/"
             for item in glob.iglob(path + "**", recursive=True):
+                if os.path.islink(item):
+                    continue
                 stats = os.stat(item)
                 if os.path.isfile(item):
                     path = Path(service=self.service,

@@ -84,15 +84,23 @@ class ManageDatabase:
     def run(self):
         if self._arguments.module == "db":
             if self._arguments.backup:
+                if os.geteuid() != 0:
+                    raise PermissionError("this operations must run as root.")
                 engine = Engine()
                 engine.create_backup(self._arguments.backup)
             if self._arguments.restore:
+                if os.geteuid() != 0:
+                    raise PermissionError("this operations must run as root.")
                 engine = Engine()
                 engine.restore_backup(self._arguments.restore)
             if self._arguments.drop:
+                if os.geteuid() != 0:
+                    raise PermissionError("this operations must run as root.")
                 engine = Engine()
                 engine.recreate_database()
             if self._arguments.init:
+                if os.geteuid() != 0:
+                    raise PermissionError("this operations must run as root.")
                 engine = Engine()
                 engine.init()
             if self._arguments.add:

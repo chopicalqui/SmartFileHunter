@@ -152,7 +152,9 @@ the following attributes:
    extension.
 
 **We recommend reviewing the existing matching rules to gain a better understanding about the files that SFH is able
-to identify. Feedback for additional rules is always welcome.**
+to identify. In addition, you might not want using all the rules because most of them might have a high false positive
+rate. If this is the case, then just remove the corresponding entries because SFH does not provide any commandline
+arguments yet, which allow limiting the matching to certain rules.**
 
 SFH applies the matching rules in a specific order. The order is based on a priority (rules with a priority come
 first), which SFH automatically computes per rule by applying the following formula (`A` and `B`, where `A > B`, are

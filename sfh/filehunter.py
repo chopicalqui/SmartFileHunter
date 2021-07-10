@@ -139,6 +139,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
+        if args.log:
+            logger = logger.info("$ {}".format(" ".join(sys.argv)))
         with tempfile.TemporaryDirectory() as temp_dir:
             enumeration_class = None
             if args.list:
@@ -202,6 +204,8 @@ if __name__ == "__main__":
                         service.complete = True
     except WorkspaceNotFound as ex:
         pass
+    except PermissionError as ex:
+        logger.error(ex)
     except ftplib.error_perm:
         logger.error("FTP login failed", exc_info=args.verbose)
     except impacket.smbconnection.SessionError:
