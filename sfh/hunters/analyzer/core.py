@@ -99,7 +99,7 @@ class FileAnalzer(BaseAnalyzer):
                 # If content search did not return any results or failed, then just analyze the file name
                 if not result:
                     result = self._analyze_path_name(path)
-                    if self._args.debug and not result:
+                    if not result:
                         logger.debug("ignoring file (threshold: below, size: {}): {}".format(path.file.size_bytes,
                                                                                              str(path)))
 

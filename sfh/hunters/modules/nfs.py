@@ -101,6 +101,6 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
                                                  "is above threshold]".format(str(path), file_size).encode('utf-8'))
                         path.file.size_bytes = file_size
                         relevance = self._analyze_path_name(path)
-                        if self._args.debug and not relevance:
+                        if not relevance:
                             logger.debug("ignoring file (threshold: above, size: {}): {}".format(file_size,
                                                                                                  str(path)))

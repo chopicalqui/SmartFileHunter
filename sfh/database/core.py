@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 __version__ = 0.1
 
+import sys
 import grp
 import pwd
 import tempfile
@@ -84,19 +85,22 @@ class Engine:
         with self.session_scope() as session:
             workspaces = session.query(Workspace).all()
             if workspaces:
-                print("the following workspaces exist:")
                 for workspace in workspaces:
-                    print("- {}".format(workspace.name))
+                    print(workspace.name)
             else:
-                print("database does not contain any workspaces")
+                print("database does not contain any workspaces", file=sys.stderr)
 
     def get_session(self):
         return self._Session()
 
-    def list_workspaces(self):
+    def get_workspace_names(self) -> list:
+        """
+        Returns all workspace names in a list.
+        :return:
+        """
         with self.session_scope() as session:
-            for workspace in session.query(Workspace).all():
-                print(workspace.name)
+            result = [item.name for item in session.query(Workspace).all()]
+        return result
 
     def create_backup(self, file: str) -> None:
         """

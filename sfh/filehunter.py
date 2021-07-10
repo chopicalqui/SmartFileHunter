@@ -38,9 +38,6 @@ from database.review import ReviewConsole
 from database.report import ReportGenerator
 from database.model import WorkspaceNotFound
 from database.model import HunterType
-from database.model import Host
-from database.model import Service
-from database.model import Workspace
 from config.config import DatabaseType
 from hunters.analyzer.core import FileAnalzer
 from hunters.modules.smb import SmbSensitiveFileHunter
@@ -101,8 +98,8 @@ if __name__ == "__main__":
     parser_report.add_argument('-w', '--workspace',
                                nargs="+",
                                type=str,
-                               required=True,
-                               help='the workspace used for the enumeration')
+                               help='the workspace used for reporting. if no workspace is specified, then all '
+                                    'existing workspaces will be used')
     parser_report.add_argument('-e', '--excel', type=str, help="write report to given excel file")
     parser_report.add_argument('-c', '--csv', action="store_true", help="print report results to stdout as CSV")
 
@@ -124,7 +121,7 @@ if __name__ == "__main__":
     parser_local = sub_parser.add_parser(HunterType.local.name, help='enumerate local file system')
     LocalSensitiveFileHunter.add_argparse_arguments(parser_local)
     args = parser.parse_args()
-    
+
     level = logging.DEBUG if args.debug else logging.INFO
     handlers = [logging.StreamHandler()]
     if args.log:
@@ -161,6 +158,9 @@ if __name__ == "__main__":
                     with engine.session_scope() as session:
                         for workspace in args.workspace:
                             engine.get_workspace(session=session, name=workspace, ignore=args.ignore)
+                else:
+                    engine = Engine()
+                    args.workspace = engine.get_workspace_names()
                 ReportGenerator(args=args).run()
             elif args.module == HunterType.smb.name:
                 enumeration_class = SmbSensitiveFileHunter
@@ -194,14 +194,7 @@ if __name__ == "__main__":
                     # print statistics
                     for item in analyzers:
                         logger.info("completed consumer " + str(item))
-                    with engine.session_scope() as session:
-                        service = session.query(Service) \
-                            .join(Host) \
-                            .join(Workspace) \
-                            .filter(Workspace.name == args.workspace,
-                                    Host.address == hunter.address,
-                                    Service.port == hunter.port).one()
-                        service.complete = True
+                hunter.finish()
     except WorkspaceNotFound as ex:
         pass
     except PermissionError as ex:

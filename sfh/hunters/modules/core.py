@@ -29,7 +29,6 @@ from database.model import Host
 from database.model import Service
 from database.model import Workspace
 from database.model import HunterType
-from database.model import FileRelevance
 
 logger = logging.getLogger('smb')
 
@@ -82,10 +81,23 @@ class BaseSensitiveFileHunter(BaseAnalyzer):
         :param parser: The argument parser to which the required command line arguments shall be added.
         :return:
         """
-        relevance = [item.name for item in FileRelevance]
         parser.add_argument('-r', '--reanalyze', action="store_true", help='reanalyze already analyzed services')
         parser.add_argument('-w', '--workspace', type=str, required=True, help='the workspace used for the enumeration')
         parser.add_argument('-t', '--threads', type=int, default=10, help='number of analysis threads')
+
+    def finish(self):
+        """
+        This method is called after enumeration is completed.
+        :return:
+        """
+        with self.engine.session_scope() as session:
+            service = session.query(Service) \
+                .join(Host) \
+                .join(Workspace) \
+                .filter(Workspace.name == self.workspace,
+                        Host.address == self.service.host.address,
+                        Service.port == self.service.port).one()
+            service.complete = True
 
     def enumerate(self):
         """
@@ -104,7 +116,8 @@ class BaseSensitiveFileHunter(BaseAnalyzer):
         if not complete or self.reanalyze:
             self._enumerate()
         else:
-            logger.info("skipping service as it was already analyzed")
+            logger.info("skipping service as it was already analyzed. use argument --reanalyze to reanalyze service "
+                        "again.")
 
     def _enumerate(self):
         """

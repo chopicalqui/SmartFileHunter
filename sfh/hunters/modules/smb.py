@@ -120,9 +120,12 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         smb_target_group.add_argument('--host', type=str, metavar="HOST", help="the target SMB service's IP address")
         smb_target_group.add_argument('--port', type=int, default=445, metavar="PORT",
                                       help="the target SMB service's port")
-        smb_target_group.add_argument('--shares', type=str, nargs="*", metavar="SHARES",
-                                      help="list of shares to enumerate. if not specified, then all shares will be "
-                                           "enumerated.")
+        group = smb_target_group.add_mutually_exclusive_group()
+        group.add_argument('--shares', type=str, nargs="*", metavar="SHARES",
+                           help="list of shares to enumerate. if not specified, then all shares will be "
+                                "enumerated.")
+        group.add_argument('--show', action='store_true', help="just display existing share names without enumerating "
+                                                               "them")
         smb_authentication_group = parser.add_argument_group('authentication')
         smb_authentication_group.add_argument('-u', '--username', type=str,
                                               metavar="USERNAME", help='the name of the user to use for authentication')
@@ -138,6 +141,14 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                                                  help='ask for the password via an user input prompt')
         parser_smb_credential_group.add_argument('-H', dest="prompt_for_hash", action="store_true",
                                                  help='ask for the hash via an user input prompt')
+
+    def finish(self):
+        """
+        This method is called after enumeration is completed.
+        :return:
+        """
+        if not self._args.show:
+            super().finish()
 
     def pathify(self, path):
         """
@@ -162,6 +173,17 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             result.append(shares[i]['shi1_netname'][:-1])
         return result
 
+    def enumerate(self) -> None:
+        """
+        This method enumerates all files on the given service.
+        :return:
+        """
+        if self._args.show:
+            for name in self.shares:
+                print(name)
+        else:
+            super().enumerate()
+
     def _enumerate(self) -> None:
         """
         This method enumerates all files on the given service.
@@ -172,7 +194,8 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                 logger.debug("enumerate share: {}/{}".format(str(self.service), name))
                 self.__enumerate(name)
             except Exception:
-                logger.error("cannot access share: {}/{}".format(str(self.service), name), exc_info=self._args.verbose)
+                logger.error("cannot access share: {}/{}".format(str(self.service), name),
+                             exc_info=self._args.verbose)
 
     def __enumerate(self, share: str, directory: str = "/") -> None:
         try:
@@ -211,7 +234,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                                                      "is above threshold]".format(str(path), file_size).encode('utf-8'))
                             path.file.size_bytes = file_size
                             relevance = self._analyze_path_name(path)
-                            if self._args.debug and not relevance:
+                            if not relevance:
                                 logger.debug("ignoring file (threshold: above, size: {}): {}".format(file_size,
                                                                                                      str(path)))
         except impacket.smbconnection.SessionError:
