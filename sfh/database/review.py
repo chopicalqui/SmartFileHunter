@@ -36,6 +36,7 @@ from database.model import Workspace
 from database.model import ReviewResult
 from database.model import Path
 from database.model import FileRelevance
+from database.model import DecodingOption
 from database.model import MatchRuleAccuracy
 from sqlalchemy import text
 from sqlalchemy import asc
@@ -53,6 +54,7 @@ class DistributionType(enum.Enum):
 class ConsoleOption(enum.Enum):
     workspace = enum.auto()
     filter = enum.auto()
+    decoding = enum.auto()
 
     @staticmethod
     def get_text(option):
@@ -68,6 +70,10 @@ class ConsoleOption(enum.Enum):
    sfh> set filter File.review_result IS NOT NULL AND File.review_result = 'relevant'
  - Get all results:
    sfh> set filter 1=1"""
+        elif option == ConsoleOption.decoding:
+            result = """ specify how to proceed if the file content cannot be fully decoded to UTF-8. there are the following options:
+ - {}: characters that cannot be decoded are removed (default).
+ - {}: display the entire content as a hexdump.""".format(DecodingOption.ignore.name, DecodingOption.hexdump.name)
         else:
             raise NotImplementedError("case not implemented")
         return result
@@ -87,6 +93,7 @@ class ReviewConsole(Cmd):
         self._config = FileHunterConfig()
         if args.workspace:
             self._options[ConsoleOption.workspace] = args.workspace
+        self._options[ConsoleOption.decoding] = DecodingOption.ignore
         self._options[ConsoleOption.filter] = "File.review_result IS NULL OR File.review_result = 'tbd'"
         self._update_file_list()
 
@@ -133,7 +140,8 @@ class ReviewConsole(Cmd):
                 file = session.query(File).filter_by(id=id).one_or_none()
                 rules = session.query(MatchRule).filter_by(_search_location=SearchLocation.file_content.value).all()
                 if file:
-                    result = file.get_text(color=not self._args.nocolor,
+                    result = file.get_text(decoding=self._options[ConsoleOption.decoding],
+                                           color=not self._args.nocolor,
                                            match_rules=rules,
                                            threshold=self._config.threshold)
                     self._update_prompt_text()
@@ -251,7 +259,8 @@ class ReviewConsole(Cmd):
             print(" Name            Value")
             print(" ----            -----")
             for item in ConsoleOption:
-                print(" {:<15} {}".format(item.name, self._options[item]))
+                value = self._options[item]
+                print(" {:<15} {}".format(item.name, value.name if isinstance(value, enum.Enum) else value))
             return
         # Make sure that option exists
         if arguments[0] in [item.name for item in ConsoleOption]:
@@ -262,19 +271,27 @@ class ReviewConsole(Cmd):
         # Show value of given value
         if len(arguments) == 1:
             tmp = ConsoleOption[arguments[0]]
-            print(" {}: {}".format(arguments[0], self._options[tmp]))
+            value = self._options[tmp]
+            print(" {}: {}".format(arguments[0], value.name if isinstance(value, enum.Enum) else value))
             print(" ")
             print(ConsoleOption.get_text(tmp))
             return
         previous_value = self._options[option]
         value = " ".join(arguments[1:])
-        # input validation
+        # Input validation
         if option == ConsoleOption.workspace:
             with self._engine.session_scope() as session:
                 if session.query(Workspace).filter_by(name=value).count() == 0:
                     print("workspace '{}' does not exist.".format(value))
                     return
+        elif option == ConsoleOption.decoding:
+            if value in [item.name for item in DecodingOption]:
+                value = DecodingOption[value]
+            else:
+                print("'{}' is an invalid value for setting '{}'.".format(value, option.name))
+                return
         self._options[option] = value
+        # Refresh view
         if option == ConsoleOption.filter:
             self._options[option] = value
             try:
@@ -283,7 +300,7 @@ class ReviewConsole(Cmd):
                 print(ex)
                 self._options[option] = previous_value
                 return
-        elif option == ConsoleOption.workspace:
+        elif option in [ConsoleOption.workspace, ConsoleOption.decoding]:
             self._update_file_list()
 
     def help_set(self):

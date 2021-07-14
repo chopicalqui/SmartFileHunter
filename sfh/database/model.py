@@ -70,6 +70,11 @@ class ReviewResult(enum.Enum):
     tbd = enum.auto()
 
 
+class DecodingOption(enum.Enum):
+    ignore = enum.auto()
+    hexdump = enum.auto()
+
+
 class FileRelevance(enum.Enum):
     low = 200
     medium = 2000
@@ -289,28 +294,39 @@ class File(DeclarativeBase):
         result += text[current_position:]
         return result
 
-    def get_text(self, color: bool = False, match_rules: list = [], threshold: int = 0) -> List[str]:
+    def get_text(self,
+                 decoding: DecodingOption,
+                 color: bool = False,
+                 match_rules: list = [],
+                 threshold: int = 0) -> List[str]:
         """
         This method returns the details about the review.
         """
         result = []
         markers = []
+        decoding_successful = False
         print_bold = lambda x: colored(x, attrs=['bold']) if color else x
         review_result = self.review_result_with_color_str if color else self.review_result_str
+        # Try to decode file content
         try:
-            content = self.content.decode("utf-8")
-            for item in match_rules:
-                markers = item.get_text_markers(content, markers)
-            if color:
-                content = self.apply_highlights(content, markers)
-            result.append(content)
+            file_content = self.content.decode("utf-8")
+            decoding_successful = True
         except:
             try:
-                for line in hexdump.dumpgen(self.content):
-                    result.append(line)
+                if decoding == DecodingOption.ignore:
+                    file_content = self.content.decode(errors="ignore")
+                else:
+                    file_content = os.linesep.join([line for line in hexdump.dumpgen(self.content)])
             except Exception as ex:
                 result.append(print_bold("exception while decoding file: {}".format(str(ex))))
                 result.append(print_bold("could not print file. try to export and analyze with another program"))
+                file_content = None
+        if file_content:
+            for item in match_rules:
+                markers = item.get_text_markers(file_content, markers)
+            if color:
+                file_content = self.apply_highlights(file_content, markers)
+        result.append(file_content)
         result.append("")
         result.append("{}       {}".format(print_bold("File ID"), self.id))
         result.append("{}         {}".format(print_bold("Paths"),
@@ -329,9 +345,13 @@ class File(DeclarativeBase):
         if self.comment:
             result.append("{}       {}".format(print_bold("Comment"), self.comment))
         if color:
+            result.append("{}      {}".format(print_bold("Decoding"),
+                                              "Successful" if decoding_successful else colored("Failed", "red", attrs=["bold"])))
             result.append("{}          {}".format(print_bold("Hits"), colored(len(markers), "red", attrs=["bold"])))
         else:
             result.append("{}          {}".format(print_bold("Hits"), len(markers)))
+            result.append("{}      {}".format(print_bold("Decoding"),
+                                              "Successful" if decoding_successful else "Failed"))
         return result
 
 
@@ -491,7 +511,7 @@ class MatchRule(DeclarativeBase):
 
     def get_text_markers(self, text: str, known_markers: list = []) -> list:
         """
-        This method determines searches the given text for a matches and returns a list of tuples documenting the
+        This method searches the given text for a matches and returns a list of tuples documenting the
         locations where the matches started and stopped.
         :param text: The text that is searched.
         :param known_markers: Markers that have previously already identified.
