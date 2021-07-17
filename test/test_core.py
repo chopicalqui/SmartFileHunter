@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __version__ = 0.1
 
 import unittest
+from test.core import ArgumentHelper
 from database.model import Path
 from config.config import FileHunter as FileHunterConfig
 
@@ -34,7 +35,7 @@ class TestFileHunterConfig(unittest.TestCase):
 
     def __init__(self, test_name: str):
         super().__init__(test_name)
-        self._config = FileHunterConfig()
+        self._config = FileHunterConfig(args=ArgumentHelper())
 
     def test_match_rules_correctly_sorted(self):
         for rules in self._config.matching_rules.values():
@@ -52,7 +53,7 @@ class TestFileSizeThreshold(unittest.TestCase):
 
     def __init__(self, test_name: str):
         super().__init__(test_name)
-        self._config = FileHunterConfig()
+        self._config = FileHunterConfig(args=ArgumentHelper())
 
     def test_zip_file_below_threshold(self):
         result = self._config.is_below_threshold(path=Path(full_path="/tmp/test.zip"),

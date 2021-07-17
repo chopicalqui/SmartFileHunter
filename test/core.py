@@ -27,6 +27,20 @@ from database.core import Engine
 from sqlalchemy.orm.session import Session
 
 
+class ArgumentHelper:
+    def __init__(self, workspace: str = 'test',
+                 host: str = "127.0.0.1",
+                 nocolor: bool = True,
+                 netbios: list = None,
+                 upn: list = None):
+        self.workspace = workspace
+        self.host = host
+        self.debug = False
+        self.nocolor = nocolor
+        self.netbios = netbios if netbios else []
+        self.upn = upn if upn else []
+
+
 class BaseTestCase(unittest.TestCase):
     """
     This method implements all base functionalities for test cases

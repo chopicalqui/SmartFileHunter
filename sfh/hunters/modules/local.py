@@ -54,11 +54,16 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
         """
         BaseSensitiveFileHunter.add_argparse_arguments(parser)
         parser.add_argument('path', nargs="+", help='directories to enumerate')
-        parser.add_argument('--domains', type=str, nargs="*", metavar="USERDOMAIN",
-                            help='the name of the domain name of existing microsoft active directories. if specified, '
+        parser.add_argument('--netbios', type=str, nargs="*", metavar="NETBIOS",
+                            help='the netbios name of the existing microsoft active directories. if specified, '
                                  'then the specified values become additional file content matching rules with'
-                                 'search pattern: "USERDOMAIN[/\\]\\w+". the objective is the identification domain '
-                                 'user names in files.')
+                                 'search pattern: "NETBIOS[/\\]\\w+". the objective is the identification of files '
+                                 'containing domain user names and eventually their passwords.')
+        parser.add_argument('--upn', type=str, nargs="*", metavar="DOMAIN",
+                            help='the domain name of the existing microsoft active directories. if specified, '
+                                 'then the specified values become additional file content matching rules with'
+                                 'search pattern: "\\w+@DOMAIN". the objective is the identification of files '
+                                 'containing UPNs and eventually their passwords.')
 
     def _enumerate(self) -> None:
         """

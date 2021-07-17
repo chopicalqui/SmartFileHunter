@@ -26,6 +26,7 @@ import enum
 import json
 import logging
 import passgen
+import argparse
 import configparser
 from database.model import MatchRule
 from database.model import FileRelevance
@@ -76,7 +77,7 @@ class BaseConfig:
 class FileHunter(BaseConfig):
     """This class contains the ConfigParser object for the database"""
 
-    def __init__(self, domain_names: list = None):
+    def __init__(self, args: argparse.Namespace):
         super().__init__("hunter.config")
         self.matching_rules = {item.name: [] for item in SearchLocation}
         self.supported_archives = []
@@ -93,12 +94,20 @@ class FileHunter(BaseConfig):
             except re.error:
                 logging.error("failed to compile regex: {}".format(match_rule["search_pattern"]))
         # Add Microsoft Active Directory domain names to search list
-        if domain_names:
-            for domain_name in domain_names:
+        if "netbios" in args and args.netbios:
+            for name in args.netbios:
                 match_rule = MatchRule(search_location=SearchLocation.file_content,
                                        relevance=FileRelevance.medium,
                                        accuracy=MatchRuleAccuracy.medium,
-                                       search_pattern="{}[\\\\/]\\w+".format(domain_name))
+                                       search_pattern="{}[\\\\/]\\w+".format(name))
+                self.matching_rules[SearchLocation.file_content.name].append(match_rule)
+        # Add Microsoft Active Directory UPNs to search list
+        if "upn" in args and args.upn:
+            for name in args.upn:
+                match_rule = MatchRule(search_location=SearchLocation.file_content,
+                                       relevance=FileRelevance.medium,
+                                       accuracy=MatchRuleAccuracy.medium,
+                                       search_pattern="\\w+@{}".format(name))
                 self.matching_rules[SearchLocation.file_content.name].append(match_rule)
         # Sort matching rules according to their priority
         for key, value in self.matching_rules.items():

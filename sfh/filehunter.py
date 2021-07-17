@@ -173,7 +173,7 @@ if __name__ == "__main__":
             if enumeration_class:
                 analyzers = []
                 engine = Engine()
-                config = FileHunterConfig(domain_names=args.domains)
+                config = FileHunterConfig(args=args)
                 file_queue = Queue(maxsize=20)
                 DeclarativeBase.metadata.bind = engine.engine
                 # Check wheather name space exists

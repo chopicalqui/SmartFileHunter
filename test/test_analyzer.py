@@ -34,18 +34,9 @@ from database.model import SearchLocation
 from database.model import FileRelevance
 from database.model import MatchRuleAccuracy
 from test.core import BaseTestCase
+from test.core import ArgumentHelper
 from hunters.analyzer.core import FileAnalzer
 from config.config import FileHunter
-
-
-class ArgumentHelper:
-    def __init__(self, workspace: str = 'test',
-                 host: str = "127.0.0.1",
-                 nocolor: bool = True):
-        self.workspace = workspace
-        self.host = host
-        self.debug = False
-        self.nocolor = nocolor
 
 
 class BaseTestFileAnalyzer(BaseTestCase):
@@ -65,7 +56,7 @@ class BaseTestFileAnalyzer(BaseTestCase):
         analyzer = FileAnalzer(args=ArgumentHelper(workspace=workspace),
                                engine=self._engine,
                                file_queue=queue.Queue(),
-                               config=FileHunter())
+                               config=FileHunter(args=ArgumentHelper()))
         path = Path(service=Service(name=HunterType.local,
                                     host=Host(address="127.0.0.1")),
                     full_path=full_path,
@@ -225,7 +216,7 @@ class TestFileSize(BaseTestFileAnalyzer):
         analyzer = FileAnalzer(args=ArgumentHelper(workspace=workspace),
                                engine=self._engine,
                                file_queue=queue.Queue(),
-                               config=FileHunter())
+                               config=FileHunter(args=ArgumentHelper()))
         path = Path(service=Service(name=HunterType.local,
                                     host=Host(address="127.0.0.1")),
                     full_path=full_path)
@@ -572,6 +563,58 @@ exit 0""")
             self.assertEqual(FileRelevance.medium, result.relevance)
             self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
             self.assertEqual('eyJ\\w+?\\.eyJ\\w+?\\.', result.search_pattern)
+
+    def test_domain_name_argument(self):
+        self.init_db()
+        workspace = self._workspaces[0]
+        # Add workspace
+        with self._engine.session_scope() as session:
+            self._engine.add_workspace(session=session, name=workspace)
+        # Initialize analyzer and create workspace
+        argument_helper = ArgumentHelper(workspace=workspace, netbios=["CONTOSO"])
+        analyzer = FileAnalzer(args=argument_helper,
+                               engine=self._engine,
+                               file_queue=queue.Queue(),
+                               config=FileHunter(args=argument_helper))
+        path = Path(service=Service(name=HunterType.local,
+                                    host=Host(address="127.0.0.1")),
+                    full_path="\\\\DC1\\...\\{xyz}\\Machine\\Scripts\\application.log")
+        path.file = File(content=""""2021-07-12 11:00:01 - CONTOSO\Test:[REDACTED] logged in.""".encode('utf-8'))
+        analyzer._analyze_content(path)
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("CONTOSO[\\\\/]\\w+", result.search_pattern)
+
+    def test_netbios_name_argument(self):
+        self.init_db()
+        workspace = self._workspaces[0]
+        # Add workspace
+        with self._engine.session_scope() as session:
+            self._engine.add_workspace(session=session, name=workspace)
+        # Initialize analyzer and create workspace
+        argument_helper = ArgumentHelper(workspace=workspace, upn=["contoso.org"])
+        analyzer = FileAnalzer(args=argument_helper,
+                               engine=self._engine,
+                               file_queue=queue.Queue(),
+                               config=FileHunter(args=argument_helper))
+        path = Path(service=Service(name=HunterType.local,
+                                    host=Host(address="127.0.0.1")),
+                    full_path="\\\\DC1\\...\\{xyz}\\Machine\\Scripts\\application.log")
+        path.file = File(content=""""2021-07-12 11:00:01 - test@contoso.org:[REDACTED] logged in.""".encode('utf-8'))
+        analyzer._analyze_content(path)
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("\\w+@contoso.org", result.search_pattern)
 
 
 class TestFileName(BaseTestFileAnalyzer):

@@ -99,7 +99,7 @@ class ReviewConsole(Cmd):
         self._environment = None
         self._engine = Engine()
         self._file_ids = []
-        self._config = FileHunterConfig()
+        self._config = FileHunterConfig(args=args)
         if args.workspace:
             self._options[ConsoleOption.workspace] = args.workspace
         self._options[ConsoleOption.decoding] = DecodingOption.ignore
