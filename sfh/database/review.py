@@ -49,17 +49,20 @@ class DistributionType(enum.Enum):
     extension = enum.auto()
     mimetype = enum.auto()
     result = enum.auto()
+    rule = enum.auto()
 
 
 class ConsoleOption(enum.Enum):
-    workspace = enum.auto()
-    filter = enum.auto()
+    colorize = enum.auto()
     decoding = enum.auto()
+    filter = enum.auto()
+    summarize = enum.auto()
+    workspace = enum.auto()
 
     @staticmethod
     def get_text(option):
         if option == ConsoleOption.workspace:
-            result = """ review files in the given workspace"""
+            result = """ review files in the given workspace."""
         elif option == ConsoleOption.filter:
             result = """ update where clause to limit review list. examples of valid filters are:
  - All files that have not been reviewed and do not have the extension html, js, or css:
@@ -73,7 +76,13 @@ class ConsoleOption(enum.Enum):
         elif option == ConsoleOption.decoding:
             result = """ specify how to proceed if the file content cannot be fully decoded to UTF-8. there are the following options:
  - {}: characters that cannot be decoded are removed (default).
- - {}: display the entire content as a hexdump.""".format(DecodingOption.ignore.name, DecodingOption.hexdump.name)
+ - {}: display the entire content as a hexdump. this will temporarily disable {} mode.""".format(DecodingOption.ignore.name,
+                                                                                                 DecodingOption.hexdump.name,
+                                                                                                 ConsoleOption.summarize.name)
+        elif option == ConsoleOption.summarize:
+            result = """ if true, then only the text around a matching rule is displayed during the review. this will also switch from {} to {} mode. if false, then the file's full content is displayed.""".format(DecodingOption.hexdump.name, DecodingOption.ignore.name)
+        elif option == ConsoleOption.colorize:
+            result = """ if true, then text that matches a matching rule is highlighted in red, else it wont."""
         else:
             raise NotImplementedError("case not implemented")
         return result
@@ -94,6 +103,8 @@ class ReviewConsole(Cmd):
         if args.workspace:
             self._options[ConsoleOption.workspace] = args.workspace
         self._options[ConsoleOption.decoding] = DecodingOption.ignore
+        self._options[ConsoleOption.summarize] = True
+        self._options[ConsoleOption.colorize] = not self._args.nocolor
         self._options[ConsoleOption.filter] = "File.review_result IS NULL OR File.review_result = 'tbd'"
         self._update_file_list()
 
@@ -141,7 +152,8 @@ class ReviewConsole(Cmd):
                 rules = session.query(MatchRule).filter_by(_search_location=SearchLocation.file_content.value).all()
                 if file:
                     result = file.get_text(decoding=self._options[ConsoleOption.decoding],
-                                           color=not self._args.nocolor,
+                                           color=self._options[ConsoleOption.colorize],
+                                           summarize=self._options[ConsoleOption.summarize],
                                            match_rules=rules,
                                            threshold=self._config.threshold)
                     self._update_prompt_text()
@@ -260,7 +272,8 @@ class ReviewConsole(Cmd):
             print(" ----            -----")
             for item in ConsoleOption:
                 value = self._options[item]
-                print(" {:<15} {}".format(item.name, value.name if isinstance(value, enum.Enum) else value))
+                print(" {:<15} {}".format(item.name,
+                                          str(value.name if isinstance(value, enum.Enum) else value).lower()))
             return
         # Make sure that option exists
         if arguments[0] in [item.name for item in ConsoleOption]:
@@ -272,7 +285,7 @@ class ReviewConsole(Cmd):
         if len(arguments) == 1:
             tmp = ConsoleOption[arguments[0]]
             value = self._options[tmp]
-            print(" {}: {}".format(arguments[0], value.name if isinstance(value, enum.Enum) else value))
+            print(" {}: {}".format(arguments[0], str(value.name if isinstance(value, enum.Enum) else value)).lower())
             print(" ")
             print(ConsoleOption.get_text(tmp))
             return
@@ -287,8 +300,32 @@ class ReviewConsole(Cmd):
         elif option == ConsoleOption.decoding:
             if value in [item.name for item in DecodingOption]:
                 value = DecodingOption[value]
+                # If hexdupm is chosen, then we disable summary view
+                if self._options[ConsoleOption.summarize] and value == DecodingOption.hexdump:
+                    print("{} mode wont be active during {} mode.".format(ConsoleOption.summarize.name,
+                                                                          DecodingOption.hexdump.name))
             else:
                 print("'{}' is an invalid value for setting '{}'.".format(value, option.name))
+                return
+        elif option == ConsoleOption.summarize:
+            if value in ["True", "true"]:
+                value = True
+                if self._options[ConsoleOption.decoding] == DecodingOption.hexdump:
+                    print("switching from {} to {} mode.".format(DecodingOption.hexdump.name,
+                                                                 DecodingOption.ignore.name))
+                    self._options[ConsoleOption.decoding] = DecodingOption.ignore
+            elif value in ["False", "false"]:
+                value = False
+            else:
+                print("given value must be true or false")
+                return
+        elif option == ConsoleOption.colorize:
+            if value in ["True", "true"]:
+                value = True
+            elif value in ["False", "false"]:
+                value = False
+            else:
+                print("given value must be true or false")
                 return
         self._options[option] = value
         # Refresh view
@@ -300,8 +337,12 @@ class ReviewConsole(Cmd):
                 print(ex)
                 self._options[option] = previous_value
                 return
-        elif option in [ConsoleOption.workspace, ConsoleOption.decoding]:
+        elif option in [ConsoleOption.workspace]:
             self._update_file_list()
+        elif option in [ConsoleOption.decoding,
+                        ConsoleOption.colorize,
+                        ConsoleOption.summarize]:
+            self._update_view()
 
     def help_set(self):
         print("""usage: set [option] [value]
@@ -382,6 +423,26 @@ If both are omitted, print options that are currently set.""")
                         df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
                         print(pandas.pivot_table(df,
                                                  index="mime_type",
+                                                 columns=["relevance", "accuracy"],
+                                                 values="count_1",
+                                                 aggfunc=numpy.sum,
+                                                 fill_value=0))
+                except Exception as ex:
+                    print(ex)
+            elif argument == DistributionType.rule:
+                try:
+                    with self._engine.session_scope() as session:
+                        q = session.query(MatchRule.category, MatchRule._search_pattern, MatchRule._relevance, MatchRule._accuracy, func.count(File.id)) \
+                            .join((File, MatchRule.files)) \
+                            .join((Workspace, File.workspace)) \
+                            .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
+                                                                               self._options[ConsoleOption.filter]))) \
+                            .group_by(MatchRule.category, MatchRule._search_pattern, MatchRule._relevance, MatchRule._accuracy, MatchRule._accuracy)
+                        df = pandas.read_sql(q.statement, q.session.bind)
+                        df["relevance"] = df["relevance"].apply(lambda x: FileRelevance(x).name)
+                        df["accuracy"] = df["accuracy"].apply(lambda x: MatchRuleAccuracy(x).name)
+                        print(pandas.pivot_table(df,
+                                                 index=["category", 'search_pattern'],
                                                  columns=["relevance", "accuracy"],
                                                  values="count_1",
                                                  aggfunc=numpy.sum,

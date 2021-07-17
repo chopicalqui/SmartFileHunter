@@ -277,26 +277,57 @@ class File(DeclarativeBase):
         return hashlib.sha256(content).hexdigest()
 
     @staticmethod
-    def apply_highlights(text: str, markers: list) -> str:
+    def apply_highlights(text: str,
+                         markers: list,
+                         summarize: bool = True,
+                         color: bool = False,
+                         extra_characters_before: int = 30,
+                         extra_characters_after: int = 30) -> str:
         """
         This method color-codes the text based on the given marker ranges.
         """
         if not markers:
             return text
-        color_code = lambda x: colored(x, "red",  attrs=['bold'])
+        if color:
+            color_code = lambda x: colored(x, "red",  attrs=['bold'])
+        else:
+            color_code = lambda x: x
         result = ""
+        text_length = len(text) - 1
         current_position = 0
         markers.sort()
-        for i, j in markers:
-            result += text[current_position:i]
-            result += color_code(text[i:j])
-            current_position = j
-        result += text[current_position:]
+        if summarize:
+            for i, j in markers:
+                # Compile before highlights
+                start_position = i - extra_characters_before
+                if start_position < 0:
+                    start_position = 0
+                else:
+                    result += "[...]"
+                current_text = text[start_position:i]
+                # Compile highlights
+                current_text += color_code(text[i:j])
+                # Compile after highlights
+                end_position = j + extra_characters_after
+                if end_position > text_length:
+                    current_text += text[j:]
+                else:
+                    current_text += text[j:end_position] + "[...]"
+                if current_text[-1] != os.linesep:
+                    current_text += os.linesep
+                result += current_text
+        else:
+            for i, j in markers:
+                result += text[current_position:i]
+                result += color_code(text[i:j])
+                current_position = j
+            result += text[current_position:]
         return result
 
     def get_text(self,
                  decoding: DecodingOption,
                  color: bool = False,
+                 summarize: bool = False,
                  match_rules: list = [],
                  threshold: int = 0) -> List[str]:
         """
@@ -324,8 +355,10 @@ class File(DeclarativeBase):
         if file_content:
             for item in match_rules:
                 markers = item.get_text_markers(file_content, markers)
-            if color:
-                file_content = self.apply_highlights(file_content, markers)
+            file_content = self.apply_highlights(file_content,
+                                                 markers=markers,
+                                                 summarize=summarize and decoding != DecodingOption.hexdump,
+                                                 color=color)
         result.append(file_content)
         result.append("")
         result.append("{}       {}".format(print_bold("File ID"), self.id))
