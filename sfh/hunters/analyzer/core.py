@@ -113,17 +113,23 @@ class FileAnalzer(BaseAnalyzer):
             with tempfile.TemporaryDirectory() as dir_name:
                 Archive(file_name.name).extractall(dir_name)
                 for item in glob.glob(dir_name + "/**", recursive=True):
+                    if os.path.islink(item):
+                        continue
                     stats = os.stat(item)
                     if os.path.isfile(item):
                         full_path = item.replace(dir_name, path.full_path, 1)
-                        with open(item, "rb") as file:
-                            content = file.read()
                         tmp = Path(service=path.service,
                                    full_path=full_path,
                                    access_time=datetime.fromtimestamp(stats.st_atime, tz=timezone.utc),
                                    modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
-                                   creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc),
-                                   file=File(content=content))
-                        self.analyze(tmp)
+                                   creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc))
+                        if self.is_file_size_below_threshold(tmp, stats.st_size):
+                            with open(item, "rb") as file:
+                                content = file.read()
+                            tmp.file = File(content=content)
+                            self.analyze(tmp)
+                        else:
+                            logger.debug("ignoring file (threshold: above, size: {}): {}".format(stats.st_size,
+                                                                                                 str(path)))
                     elif os.path.isfile(item):
                         logger.debug("skip file: {}".format(item))
