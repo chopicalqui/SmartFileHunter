@@ -27,12 +27,13 @@ from database.core import Engine
 from sqlalchemy.orm.session import Session
 
 
-class ArgumentHelper:
+class ArgumentHelper(list):
     def __init__(self, workspace: str = 'test',
                  host: str = "127.0.0.1",
                  nocolor: bool = True,
                  netbios: list = None,
                  upn: list = None):
+        super().__init__(["workspace", "host", "debug", "nocolor", "netbios", "upn"])
         self.workspace = workspace
         self.host = host
         self.debug = False
