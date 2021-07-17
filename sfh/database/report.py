@@ -29,8 +29,9 @@ from database.model import File
 from database.model import Workspace
 from database.model import ReviewResult
 from database.core import Engine
-from datetime import datetime
+from OpenSSL import crypto
 from openpyxl import Workbook
+from datetime import datetime
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils.exceptions import IllegalCharacterError
@@ -39,7 +40,8 @@ from sqlalchemy.orm.session import Session
 
 
 class ExcelReport(enum.Enum):
-    file = enum.auto()
+    relevant = enum.auto()
+    certificate = enum.auto()
 
 
 class _BaseReportGenerator:
@@ -103,9 +105,9 @@ class _BaseReportGenerator:
         worksheet.add_table(table)
 
 
-class _ReportGenerator(_BaseReportGenerator):
+class _FileSummaryReportGenerator(_BaseReportGenerator):
     """
-    This method creates all reports for hosts
+    This method creates the report about all relevant files.
     """
 
     def __init__(self, args, session: Session, workspaces: List[Workspace], **kwargs) -> None:
@@ -151,11 +153,123 @@ class _ReportGenerator(_BaseReportGenerator):
         return result
 
 
+class ReportExtension(enum.Enum):
+    subjectAltName = enum.auto()
+    basicConstraints = enum.auto()
+    keyUsage = enum.auto()
+    extendedKeyUsage = enum.auto()
+
+
+class CertificateExtension:
+    """
+    This class holds certificate extension information
+    """
+    def __init__(self, extension: crypto.X509Extension):
+        self.name = extension.get_short_name().decode()
+        self.critical = extension.get_critical() != 0
+        self.value = str(extension)
+
+
+class _CertificateReportGenerator(_BaseReportGenerator):
+    """
+    This method creates the report about all collected certificates.
+    """
+
+    def __init__(self, args, session: Session, workspaces: List[Workspace], **kwargs) -> None:
+        super().__init__(args,
+                         session,
+                         workspaces,
+                         name="certificate summary",
+                         title="List of identified relevant files",
+                         description="The table provides an overview about all files, which have been identified"
+                                     "during the review.",
+                         **kwargs)
+
+    def _get_certificate(self, file: File) -> crypto.X509:
+        result = None
+        try:
+            result = crypto.load_certificate(crypto.FILETYPE_ASN1, file.content)
+        except:
+            try:
+                result = crypto.load_certificate(crypto.FILETYPE_PEM, file.content)
+            except:
+                try:
+                    result = crypto.load_certificate(crypto.FILETYPE_TEXT, file.content)
+                except:
+                    pass
+        return result
+
+    def get_csv(self) -> List[List[str]]:
+        """
+        Method determines whether the given item shall be included into the report
+        """
+        result = [["Ref.",
+                   "Workspace",
+                   "Review Result",
+                   "Full Paths",
+                   "Common Name",
+                   "Issuer",
+                   "Version",
+                   "Valid From",
+                   "Valid To",
+                   "Valid Years",
+                   "Has Expired",
+                   "Algorithm",
+                   "Key Size",
+                   "Serial Number",
+                   "File DB ID",
+                   "Critical Extensions"]]
+        result[0] += [item.name for item in ReportExtension]
+        date_converter = lambda x: datetime.strptime(x.decode().replace("Z", "UTC"), "%Y%m%d%H%M%S%Z")
+        x509_name = lambda x: ", ".join(["{}={}".format(key.decode(), value.decode()) for key, value in x.get_components()])
+        ref = 1
+        for workspace_str in self._workspaces:
+            for file in self._session.query(File) \
+                .join(Workspace) \
+                .join((Path, File.paths)) \
+                .filter(Workspace.name == workspace_str, File.review_result == ReviewResult.relevant).all():
+                certificate = self._get_certificate(file)
+                row = []
+                if certificate:
+                    date_from = date_converter(certificate.get_notBefore())
+                    date_to = date_converter(certificate.get_notAfter())
+                    validity = ((date_to - date_from).total_seconds()) / (3600 * 24 * 365)
+                    # Parse extensions
+                    extensions = {}
+                    for i in range(0, certificate.get_extension_count()):
+                        try:
+                            extension = CertificateExtension(certificate.get_extension(i))
+                            extensions[extension.name] = extension
+                        except:
+                            pass
+                    row = [ref,
+                           workspace_str,
+                           file.review_result.name,
+                           ", ".join([item.full_path for item in file.paths]),
+                           x509_name(certificate.get_subject()),
+                           x509_name(certificate.get_issuer()),
+                           certificate.get_version(),
+                           date_from.strftime("%Y-%m-%d %H:%M"),
+                           date_to.strftime("%Y-%m-%d %H:%M"),
+                           certificate.has_expired(),
+                           validity,
+                           certificate.get_signature_algorithm().decode(),
+                           certificate.get_pubkey().bits(),
+                           hex(certificate.get_serial_number())[2:],
+                           file.id,
+                           ", ".join([item.name for item in extensions.values() if item.critical])]
+                    row += [extensions[item.name].value if item.name in extensions else None for item in ReportExtension]
+                    result.append(row)
+                    ref += 1
+        return result
+
+
 class ReportGenerator:
     """This class creates all reports"""
 
     def __init__(self, args):
-        self._generators = {ExcelReport.file.name: _ReportGenerator}
+        self._generators = {ExcelReport.relevant.name: _FileSummaryReportGenerator,
+                            ExcelReport.certificate.name: _CertificateReportGenerator}
         self._args = args
         self._workspaces = args.workspace
         self._engine = Engine()
@@ -166,7 +280,7 @@ class ReportGenerator:
         :return:
         """
         if self._args.csv:
-            generator = self._generators[ExcelReport.file.name]
+            generator = self._generators[self._args.csv]
             with self._engine.session_scope() as session:
                 instance = generator(self._args, session, self._workspaces)
                 csv_list = instance.get_csv()
@@ -176,15 +290,15 @@ class ReportGenerator:
             if os.path.exists(self._args.excel):
                 os.unlink(self._args.excel)
             workbook = Workbook()
-            generator = self._generators[ExcelReport.file.name]
             first = True
             with self._engine.session_scope() as session:
-                instance = generator(self._args, session, self._workspaces)
-                csv_list = instance.get_csv()
-                if len(csv_list) > 1:
-                    if first:
-                        instance.fill_excel_sheet(workbook.active, csv_list=csv_list)
-                        first = False
-                    else:
-                        instance.fill_excel_sheet(workbook.create_sheet(), csv_list=csv_list)
+                for generator in self._generators.values():
+                    instance = generator(self._args, session, self._workspaces)
+                    csv_list = instance.get_csv()
+                    if len(csv_list) > 1:
+                        if first:
+                            instance.fill_excel_sheet(workbook.active, csv_list=csv_list)
+                            first = False
+                        else:
+                            instance.fill_excel_sheet(workbook.create_sheet(), csv_list=csv_list)
             workbook.save(self._args.excel)

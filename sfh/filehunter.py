@@ -35,6 +35,7 @@ from database.core import DeclarativeBase
 from database.setup import SetupTask
 from database.setup import ManageDatabase
 from database.review import ReviewConsole
+from database.report import ExcelReport
 from database.report import ReportGenerator
 from database.model import WorkspaceNotFound
 from database.model import HunterType
@@ -101,7 +102,9 @@ if __name__ == "__main__":
                                help='the workspace used for reporting. if no workspace is specified, then all '
                                     'existing workspaces will be used')
     parser_report.add_argument('-e', '--excel', type=str, help="write report to given excel file")
-    parser_report.add_argument('-c', '--csv', action="store_true", help="print report results to stdout as CSV")
+    parser_report.add_argument('-c', '--csv',
+                               choices=[item.name for item in ExcelReport],
+                               help="print report results to stdout as CSV")
 
     # setup SMB parser
     parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')

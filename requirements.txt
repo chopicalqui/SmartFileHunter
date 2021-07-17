@@ -11,3 +11,5 @@ sqlalchemy
 termcolor
 pandas
 numpy
+pyOpenSSL
+

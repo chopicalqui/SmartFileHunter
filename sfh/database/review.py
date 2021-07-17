@@ -103,7 +103,7 @@ class ReviewConsole(Cmd):
         if args.workspace:
             self._options[ConsoleOption.workspace] = args.workspace
         self._options[ConsoleOption.decoding] = DecodingOption.ignore
-        self._options[ConsoleOption.summarize] = True
+        self._options[ConsoleOption.summarize] = False
         self._options[ConsoleOption.colorize] = not self._args.nocolor
         self._options[ConsoleOption.filter] = "File.review_result IS NULL OR File.review_result = 'tbd'"
         self._update_file_list()
@@ -129,8 +129,8 @@ class ReviewConsole(Cmd):
                 .join(Workspace)
                 .join((MatchRule, File.matches))
                 .join((Path, File.paths))
-                .filter(text("Workspace.name = '{}' and {}".format(self._options[ConsoleOption.workspace],
-                                                                   self._options[ConsoleOption.filter])))
+                .filter(text("Workspace.name = '{}' and ({})".format(self._options[ConsoleOption.workspace],
+                                                                     self._options[ConsoleOption.filter])))
                 .distinct()
                 .order_by(desc(MatchRule._search_location),
                           desc(MatchRule._relevance),
