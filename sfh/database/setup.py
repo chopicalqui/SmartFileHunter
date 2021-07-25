@@ -78,7 +78,7 @@ class ManageDatabase:
     """
     def __init__(self, args: argparse.Namespace):
         self._arguments = args
-        self._hunter_config = FileHunterConfig()
+        self._hunter_config = FileHunterConfig(args=args)
         self._db_config = DatabaseFactory()
 
     def run(self):
