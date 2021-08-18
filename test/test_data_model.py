@@ -28,6 +28,7 @@ from database.model import HunterType
 from database.model import Workspace
 from database.model import Host
 from database.model import Service
+from database.model import Share
 from database.model import Path
 from database.model import File
 from database.model import MatchRule
@@ -225,10 +226,12 @@ class TestPath(BaseDataModelTestCase):
             workspace = self._engine.add_workspace(session=session, name=self._workspaces[0])
             host = self._engine.add_host(session, workspace=workspace, address="127.0.0.1")
             service = self._engine.add_service(session, host=host, port=445, name=HunterType.smb)
+            share=Share(name="D$", service=service)
             file = self._engine.add_file(session, workspace=workspace, file=File(content=b'test'))
             self._test_unique_constraint(session=session,
                                          service=service,
                                          file=file,
+                                         share=share,
                                          full_path="/tmp")
 
     def test_not_null_constraint(self):
@@ -263,24 +266,26 @@ class TestPath(BaseDataModelTestCase):
 
     def test_repr_without_service(self):
         path = Path(full_path="/IT/creds.txt")
-        self.assertEqual("", str(path))
+        self.assertEqual("/IT/creds.txt", str(path))
 
     def test_repr_without_host(self):
         service = Service(name=HunterType.smb, port=445)
         path = Path(full_path="/IT/creds.txt", service=service)
-        self.assertEqual("", str(path))
+        self.assertEqual("/IT/creds.txt", str(path))
 
     def test_repr_with_host_and_smb_service(self):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.smb, port=445, host=host)
-        path = Path(full_path="/IT/creds.txt", share="$D", service=service)
-        self.assertEqual("//127.0.0.1/$D/IT/creds.txt", str(path))
+        share = Share(name="D$", service=service)
+        path = Path(full_path="/IT/creds.txt", share=share, service=service)
+        self.assertEqual("//127.0.0.1/D$/IT/creds.txt", str(path))
 
     def test_repr_with_host_and_smb_service_non_standard_port(self):
         host = Host(address="127.0.0.1")
         service = Service(name=HunterType.smb, port=4445, host=host)
-        path = Path(full_path="/IT/creds.txt", share="$D", service=service)
-        self.assertEqual("//127.0.0.1:4445/$D/IT/creds.txt", str(path))
+        share = Share(name="D$", service=service)
+        path = Path(full_path="/IT/creds.txt", share=share, service=service)
+        self.assertEqual("//127.0.0.1:4445/D$/IT/creds.txt", str(path))
 
     def test_repr_with_host_and_ftp_service_01(self):
         host = Host(address="127.0.0.1")

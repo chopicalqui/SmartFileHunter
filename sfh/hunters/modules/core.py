@@ -26,6 +26,7 @@ import argparse
 import logging
 from hunters.core import BaseAnalyzer
 from database.model import Host
+from database.model import Share
 from database.model import Service
 from database.model import Workspace
 from database.model import HunterType
@@ -74,6 +75,53 @@ class BaseSensitiveFileHunter(BaseAnalyzer):
                                                accuracy=match_rule.accuracy,
                                                category=match_rule.category)
 
+    def _add_share(self, name: str) -> None:
+        """
+        This method adds the given share to the database.
+        :param name: The name of the share that shall be added.
+        :return:
+        """
+        with self.engine.session_scope() as session:
+            workspace = self.engine.get_workspace(session=session, name=self.service.workspace.name)
+            host = self.engine.get_host(session=session, workspace=workspace, address=self.service.host.address)
+            service = self.engine.get_service(session=session, port=self.service.port, host=host)
+            self.engine.add_share(session=session, service=service, name=name)
+
+    def _set_share_complete(self, name: str) -> None:
+        """
+        This method sets the collection status of the given share to complete.
+        :param name: The name of the share that shall be added.
+        :return:
+        """
+        with self.engine.session_scope() as session:
+            share = session.query(Share) \
+                .join(Service) \
+                .join(Host) \
+                .join(Workspace) \
+                .filter(Workspace.name == self.service.workspace.name,
+                        Host.address == self.address,
+                        Service.port == self.port,
+                        Share.name == name).one()
+            share.complete = True
+
+    def _analyze_share(self, name: str) -> bool:
+        """
+        Determines if the given share was already analyzed
+        :param name: The name of the share that shall be added.
+        :return: True if the share has to be analyzed, else False.
+        """
+        with self.engine.session_scope() as session:
+            share = session.query(Share) \
+                .join(Service) \
+                .join(Host) \
+                .join(Workspace) \
+                .filter(Workspace.name == self.service.workspace.name,
+                        Host.address == self.address,
+                        Service.port == self.port,
+                        Share.name == name).one()
+            complete = share.complete is None or not share.complete or self.reanalyze
+        return complete
+
     @staticmethod
     def add_argparse_arguments(parser: argparse.ArgumentParser) -> None:
         """
@@ -97,7 +145,7 @@ class BaseSensitiveFileHunter(BaseAnalyzer):
                 .filter(Workspace.name == self.workspace,
                         Host.address == self.service.host.address,
                         Service.port == self.service.port).one()
-            service.complete = True
+            service.complete = not service.shares
 
     def enumerate(self):
         """

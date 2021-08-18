@@ -228,10 +228,9 @@ class Engine:
         :param address: IPv4/IPv6 address that should be added to the database
         :return: Database object
         """
-        ip_address = str(ipaddress.ip_address(address))
-        result = Engine.get_host(session=session, workspace=workspace, address=ip_address)
+        result = Engine.get_host(session=session, workspace=workspace, address=address)
         if not result:
-            result = Host(address=ip_address, workspace=workspace)
+            result = Host(address=address, workspace=workspace)
             session.add(result)
             session.flush()
         return result
@@ -273,6 +272,38 @@ class Engine:
         return result
 
     @staticmethod
+    def get_share(session: Session,
+                  service: Service,
+                  name: str) -> Path:
+        """
+        This method should be used to obtain a share object from the database
+        :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+        :param service: The service object to which the share belongs
+        :param name: The share name that shall be returned
+        :return: Database object
+        """
+        return session.query(Share).filter_by(name=name, service_id=service.id).one_or_none()
+
+    @staticmethod
+    def add_share(session: Session,
+                  service: Service,
+                  name: str,
+                  complete: bool = False) -> Path:
+        """
+        This method should be used to add a share to the database
+        :param session: Sqlalchemy session that manages persistence operations for ORM-mapped objects
+        :param service: The service object to which the path belongs
+        :param name: The share that shall be added
+        :return Database object
+        """
+        result = Engine.get_share(session=session, service=service, name=name)
+        if not result:
+            result = Share(service=service, name=name, complete=complete)
+            session.add(result)
+            session.flush()
+        return result
+
+    @staticmethod
     def get_path(session: Session,
                  service: Service,
                  full_path: str) -> Path:
@@ -305,12 +336,13 @@ class Engine:
         :param creation_time: The file's creation time
         :return: Database object
         """
+        share_object = Engine.add_share(session=session, service=service, name=share) if share else None
         result = Engine.get_path(session=session, service=service, full_path=full_path)
         if not result:
             result = Path(service=service,
                           full_path=full_path,
                           file=file,
-                          share=share,
+                          share=share_object,
                           access_time=access_time,
                           modified_time=modified_time,
                           creation_time=creation_time)

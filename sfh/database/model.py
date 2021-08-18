@@ -152,6 +152,10 @@ class Service(DeclarativeBase):
                          backref=backref("service"),
                          cascade="all",
                          order_by="asc(Path._full_path)")
+    shares = relationship("Share",
+                          backref=backref("service"),
+                          cascade="all",
+                          order_by="asc(Share.name)")
     __table_args__ = (UniqueConstraint("port", "host_id", name="_service_host_unique"),)
 
     def __repr__(self):
@@ -168,6 +172,29 @@ class Service(DeclarativeBase):
         return result
 
 
+class Share(DeclarativeBase):
+    """This class holds all information about identified shares."""
+
+    __tablename__ = "share"
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, nullable=False, unique=False)
+    complete = Column(Boolean, nullable=True, unique=False, server_default='false')
+    service_id = Column(Integer, ForeignKey("service.id", ondelete='cascade'), nullable=False, unique=False)
+    paths = relationship("Path",
+                         backref=backref("share"),
+                         cascade="all",
+                         order_by="asc(Path._full_path)")
+    __table_args__ = (UniqueConstraint("name", "service_id", name="_share_service_unique"),)
+
+    def __repr__(self):
+        result = ""
+        if self.service and self.service.host:
+            result = str(self.service)
+            if self.service.name == HunterType.smb:
+                result += "/{}".format(self.name)
+        return result
+
+
 class Path(DeclarativeBase):
     """This class holds all information about identified paths."""
 
@@ -176,11 +203,11 @@ class Path(DeclarativeBase):
     _full_path = Column("full_path", Text, nullable=False, unique=False)
     file_name = Column(Text, nullable=False, unique=False)
     extension = Column(Text, nullable=False, unique=False)
-    share = Column(Text, nullable=True, server_default='')
     access_time = Column(DateTime, nullable=True)
     modified_time = Column(DateTime, nullable=True)
     creation_time = Column(DateTime, nullable=True)
     service_id = Column(Integer, ForeignKey("service.id", ondelete='cascade'), nullable=False, unique=False)
+    share_id = Column(Integer, ForeignKey("share.id", ondelete='cascade'), nullable=True, unique=False)
     file_id = Column(Integer, ForeignKey("file.id", ondelete='cascade'), nullable=True, unique=False)
     creation_date = Column(DateTime, nullable=False, default=datetime.utcnow())
     last_modified = Column(DateTime, nullable=True, onupdate=datetime.utcnow())
@@ -188,7 +215,7 @@ class Path(DeclarativeBase):
                         backref=backref("paths"),
                         cascade="all",
                         order_by="desc(File.size_bytes)")
-    __table_args__ = (UniqueConstraint('full_path', 'share', 'service_id', name='_path_unique'),)
+    __table_args__ = (UniqueConstraint('full_path', 'share_id', 'service_id', name='_path_unique'),)
 
     @property
     def full_path(self) -> str:
@@ -204,12 +231,14 @@ class Path(DeclarativeBase):
 
     def __repr__(self):
         result = ""
-        if self.service and self.service.host:
+        if self.share:
+            result = str(self.share)
+        elif self.service and self.service.host:
             result = str(self.service)
             if self.service.name == HunterType.smb and self.share:
                 result += "/{}".format(self.share)
-            if self.full_path:
-                result += self.full_path if self.full_path[0] == "/" else ("/" + self.full_path)
+        if self.full_path:
+            result += self.full_path if self.full_path[0] == "/" else ("/" + self.full_path)
         return result
 
 

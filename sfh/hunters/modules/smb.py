@@ -31,6 +31,7 @@ import impacket
 import argparse
 import tempfile
 import datetime
+from database.model import Share
 from database.model import Path
 from database.model import File
 from database.model import HunterType
@@ -57,11 +58,20 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             self.username = args.username
         else:
             self.username = ''
-        if args.password:
+        if args.ccache:
+            if not args.kerberos:
+                raise ValueError("argument --ccache must be specified with -k argument.")
+            if not os.path.isfile(args.ccache):
+                raise FileExistsError("the ccache file does not exist.")
+            os.environ["KRB5CCNAME"] = args.ccache
+            self.password = ''
+            self.lm_hash = ''
+            self.nt_hash = ''
+        elif args.password:
             self.password = args.password
             self.lm_hash = ''
             self.nt_hash = ''
-        elif args.hash:
+        elif args.hash and not args.no_pass:
             if ":" in args.hash:
                 self.lm_hash, self.nt_hash = args.hash.split(':')
             else:
@@ -86,7 +96,10 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
             raise ValueError("invalid NT hash: {}".format(self.nt_hash))
         self.domain = args.domain
         self.client = SMBConnection(self.service.host.address, self.service.host.address, sess_port=self.service.port)
-        self.client.login(self.username, self.password, self.domain, self.lm_hash, self.nt_hash)
+        if args.kerberos:
+            self.client.kerberosLogin(self.username, self.password, self.domain, self.lm_hash, self.nt_hash)
+        else:
+            self.client.login(self.username, self.password, self.domain, self.lm_hash, self.nt_hash)
         if self.verbose:
             dialect = self.client.getDialect()
             if dialect == SMB_DIALECT:
@@ -136,6 +149,18 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                                               metavar="USERNAME", help='the name of the user to use for authentication')
         smb_authentication_group.add_argument('-d', '--domain', default=".", type=str,
                                               metavar="DOMAIN", help='the domain to use for authentication')
+        smb_kerberos_authentication_group = parser.add_argument_group('kerberos authentication')
+        smb_kerberos_authentication_group.add_argument('-k', '--kerberos',
+                                                       action='store_true',
+                                                       help="instead of NTLM, use kerberos for authentication")
+        smb_kerberos_authentication_group.add_argument('--ccache',
+                                                       type=str,
+                                                       help="use given file, which contains the kerberos TGT for "
+                                                            "authentication, instead of user name and password.")
+        smb_kerberos_authentication_group.add_argument('--kdchost',
+                                                       type=str,
+                                                       help="hostname or ip address for the KDC. if not specified, "
+                                                            "the domain will be used")
         parser_smb_credential_group = smb_authentication_group.add_mutually_exclusive_group()
         parser_smb_credential_group.add_argument('--hash', action="store",
                                                  metavar="LMHASH:NTHASH", help='NTLM hashes, valid formats are'
@@ -195,16 +220,24 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
         :return:
         """
         for name in self.shares:
+            share = Share(service=self.service, name=name)
+            self._add_share(name=share.name)
             try:
-                logger.debug("enumerate share: {}/{}".format(str(self.service), name))
-                self.__enumerate(name)
+                logger.debug("enumerate share: {}/{}".format(str(self.service), share.name))
+                if self._analyze_share(share.name):
+                    self.__enumerate(share=share)
+                    self._set_share_complete(name=share.name)
+                else:
+                    logger.info(
+                        "skipping share '{}' as it was already analyzed. use argument --reanalyze to reanalyze share "
+                        "again.".format(share.name))
             except Exception:
-                logger.error("cannot access share: {}/{}".format(str(self.service), name),
+                logger.error("cannot access share: {}/{}".format(str(self.service), share.name),
                              exc_info=self._args.verbose)
 
-    def __enumerate(self, share: str, directory: str = "/") -> None:
+    def __enumerate(self, share: Share, directory: str = "/") -> None:
         try:
-            items = self.client.listPath(share, self.pathify(directory))
+            items = self.client.listPath(share.name, self.pathify(directory))
             for item in items:
                 file_size = item.get_filesize()
                 filename = item.get_longname()
@@ -225,7 +258,7 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                                 # Obtain file content
                                 with tempfile.NamedTemporaryFile(dir=self.temp_dir) as temp:
                                     with open(temp.name, "wb") as file:
-                                        self.client.getFile(share, full_path, file.write, FILE_SHARE_READ)
+                                        self.client.getFile(share.name, full_path, file.write, FILE_SHARE_READ)
                                     with open(temp.name, "rb") as file:
                                         content = file.read()
                                 path.file = File(content=content)
@@ -244,5 +277,5 @@ class SmbSensitiveFileHunter(BaseSensitiveFileHunter):
                                                                                                      str(path)))
         except impacket.smbconnection.SessionError:
             # Catch permission exception, if SMB user does not have read permission on a certain directory
-            logger.error("cannot access item: {}/{}{}".format(str(self.service), share, str(directory)),
+            logger.error("cannot access item: {}/{}{}".format(str(self.service), share.name, str(directory)),
                          exc_info=self._args.verbose)

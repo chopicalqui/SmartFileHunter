@@ -96,7 +96,7 @@ class BaseAnalyzer(Thread):
                 self.engine.add_path(session=session,
                                      service=service,
                                      full_path=path.full_path,
-                                     share=path.share,
+                                     share=path.share.name if path.share else None,
                                      file=file,
                                      access_time=path.access_time,
                                      modified_time=path.modified_time,
