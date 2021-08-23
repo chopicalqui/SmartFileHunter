@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "smartfilehunter"
+version = "0.1.0"
+description = ""
+authors = ["Lukas Reiter <chopicalqui@protonmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+impacket = "^0.9.23"
+libnfs = "^1.0.post4"
+python-magic = "^0.4.24"
+openpyxl = "^3.0.7"
+hexdump = "^3.3"
+pyunpack = "^0.2.2"
+patool = "^1.12"
+passgen = "^1.1.1"
+psycopg2-binary = "^2.9.1"
+SQLAlchemy = "^1.4.23"
+termcolor = "^1.1.0"
+pandas = "^1.3.2"
+numpy = "1.19.5"
+pyOpenSSL = "^20.0.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "*"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
