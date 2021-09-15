@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "smartfilehunter"
 version = "0.1.0"
-description = ""
+description = "The objective of Smart File Hunter (SFH) is the efficient identification of files containing sensitive information like passwords or private keys. Thereby, SFH is able to enumerate FTP, NFS, or SMB services as well as local filesystems."
 authors = ["Lukas Reiter <chopicalqui@protonmail.com>"]
 
 [tool.poetry.dependencies]

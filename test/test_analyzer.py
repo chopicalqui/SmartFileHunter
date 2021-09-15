@@ -353,7 +353,7 @@ exit 0""")
             self.assertEqual(SearchLocation.file_content, result.search_location)
             self.assertEqual(FileRelevance.high, result.relevance)
             self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
-            self.assertEqual("^-+BEGIN.*?PRIVATE KEY-+", result.search_pattern)
+            self.assertEqual("-+BEGIN.*?PRIVATE KEY-+", result.search_pattern)
 
     def test_perl_password_dict(self):
         self.init_db()
@@ -453,7 +453,7 @@ exit 0""")
             self.assertEqual(SearchLocation.file_content, result.search_location)
             self.assertEqual(FileRelevance.high, result.relevance)
             self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
-            self.assertEqual("connectionString=[\"'].*;\\s*((password)|(pwd))\\s*=", result.search_pattern)
+            self.assertEqual("connectionString=[\"'].*;\\s*password\\s*=", result.search_pattern)
 
     def test_connection_string_xml_02(self):
         self.init_db()
@@ -473,7 +473,27 @@ exit 0""")
             self.assertEqual(SearchLocation.file_content, result.search_location)
             self.assertEqual(FileRelevance.high, result.relevance)
             self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
-            self.assertEqual("connectionString=[\"'].*;\\s*((password)|(pwd))\\s*=", result.search_pattern)
+            self.assertEqual("connectionString=[\"'].*;\\s*password\\s*=", result.search_pattern)
+
+    def test_connection_string_xml_02(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/var/www/html/web.config",
+                               txt_content="""<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <connectionStrings>
+    <add name="SiteSqlServer" connectionString="Data Source=localhost;Initial Catalog=database;User ID=administrator;pwd=[REDACTED]" providerName="System.Data.SqlClient" />
+  </connectionStrings>
+</configuration>""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("connectionString=[\"'].*;\\s*pwd\\s*=", result.search_pattern)
 
     def test_connection_string_xml_03(self):
         self.init_db()
@@ -493,7 +513,7 @@ exit 0""")
             self.assertEqual(SearchLocation.file_content, result.search_location)
             self.assertEqual(FileRelevance.high, result.relevance)
             self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
-            self.assertEqual("connectionString=[\"'].*;\\s*((password)|(pwd))\\s*=", result.search_pattern)
+            self.assertEqual("connectionString=[\"'].*;\\s*pwd\\s*=", result.search_pattern)
 
     def test_connection_string_json(self):
         self.init_db()
@@ -635,6 +655,51 @@ exit 0""")
             self.assertEqual(FileRelevance.medium, result.relevance)
             self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
             self.assertEqual("\\w+@contoso.org", result.search_pattern)
+
+    def test_azure_console_login_ps1_01(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\upload.ps1",
+                               txt_content="az login -u test -p [REDACTED]")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("az login .*((-p)|(--password)).*", result.search_pattern)
+
+    def test_azure_console_login_ps1_02(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\upload.ps1",
+                               txt_content=" az login -u test -p [REDACTED]")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("az login .*((-p)|(--password)).*", result.search_pattern)
+
+    def test_azure_console_login_ps1_03(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\upload.ps1",
+                               txt_content="#az login -u test -p [REDACTED]")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
+            self.assertEqual("az login .*((-p)|(--password)).*", result.search_pattern)
 
 
 class TestFileName(BaseTestFileAnalyzer):
