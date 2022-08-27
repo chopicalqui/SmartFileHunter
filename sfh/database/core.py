@@ -27,7 +27,7 @@ import tempfile
 import ipaddress
 import subprocess
 from sqlalchemy import create_engine
-from config.config import DatabaseFactory
+from database.config import DatabaseFactory
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
@@ -322,6 +322,7 @@ class Engine:
                  full_path: str,
                  file: File,
                  share: str = None,
+                 extra_info: dict = None,
                  access_time: DateTime = None,
                  modified_time: DateTime = None,
                  creation_time: DateTime = None) -> Path:
@@ -343,6 +344,7 @@ class Engine:
                           full_path=full_path,
                           file=file,
                           share=share_object,
+                          extra_info=extra_info,
                           access_time=access_time,
                           modified_time=modified_time,
                           creation_time=creation_time)

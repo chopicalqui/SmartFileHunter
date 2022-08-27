@@ -55,6 +55,13 @@ class BaseConfig:
         self.config = configparser.ConfigParser()
         self.config.read(self.full_path)
 
+    @staticmethod
+    def get_log_file() -> str:
+        path = BaseConfig.get_script_home()
+        if BaseConfig.ENV_LOG_PATH in os.environ:
+            path = os.environ[BaseConfig.ENV_LOG_PATH]
+        return os.path.join(path, "smartfilehunter.log")
+
     def write(self) -> None:
         with open(self.full_path, "w") as file:
             self.config.write(file)
@@ -78,7 +85,7 @@ class FileHunter(BaseConfig):
     """This class contains the ConfigParser object for the database"""
 
     def __init__(self, args: argparse.Namespace):
-        super().__init__("hunter.config")
+        super().__init__("../config/hunter.config")
         self.matching_rules = {item.name: [] for item in SearchLocation}
         self.supported_archives = []
         self.threshold = self.get_config_int("general", "max_file_size_bytes")
@@ -140,7 +147,7 @@ class BaseDatabase(BaseConfig):
                  production_section: str,
                  unittest_section: str,
                  production: bool = True):
-        super().__init__("database.config")
+        super().__init__("../config/database.config")
         self._production = production
         self._production_section = production_section
         self._unittest_section = unittest_section
@@ -165,6 +172,12 @@ class BaseDatabase(BaseConfig):
 
 class DatabasePostgreSql(BaseDatabase):
     """This class contains the ConfigParser object for the database"""
+    ENV_USER = "SFH_DB_USER"
+    ENV_PASSWORD_FILE = "SFH_DB_PASSWORD_FILE"
+    ENV_HOST = "SFH_DB_HOST"
+    ENV_PORT = "SFH_DB_PORT"
+    ENV_DB_NAME = "SFH_DB_NAME"
+    ENV_LOG_PATH = "SFH_LOG_PATH"
 
     def __init__(self, production: bool = True):
         super().__init__(production=production,
@@ -174,20 +187,80 @@ class DatabasePostgreSql(BaseDatabase):
             self.password = passgen.passgen(30)
 
     @property
+    def db_envs(self) -> dict:
+        result = {}
+        if DatabasePostgreSql.ENV_PORT in os.environ and \
+           DatabasePostgreSql.ENV_HOST in os.environ and \
+           DatabasePostgreSql.ENV_DB_NAME in os.environ and \
+           DatabasePostgreSql.ENV_USER in os.environ and \
+           DatabasePostgreSql.ENV_PASSWORD_FILE in os.environ:
+            result = {DatabasePostgreSql.ENV_PORT: self.env_port,
+                      DatabasePostgreSql.ENV_HOST: self.env_host,
+                      DatabasePostgreSql.ENV_DB_NAME: self.env_database,
+                      DatabasePostgreSql.ENV_USER: self.env_username,
+                      DatabasePostgreSql.ENV_PASSWORD_FILE: self.env_password_file}
+        return result
+
+    @property
+    def env_host(self) -> str:
+        result = None
+        if DatabasePostgreSql.ENV_HOST in os.environ:
+            result = os.environ[DatabasePostgreSql.ENV_HOST]
+        return result
+
+    @property
     def host(self) -> str:
-        return self.get_config_str(self._production_section, "host")
+        result = self.env_host
+        if not result:
+            result = self.get_config_str(self._production_section, "host")
+        return result
+
+    @property
+    def env_port(self) -> int:
+        result = None
+        if DatabasePostgreSql.ENV_PORT in os.environ:
+            result = int(os.environ[DatabasePostgreSql.ENV_PORT])
+        return result
 
     @property
     def port(self) -> int:
-        return self.get_config_int(self._production_section, "port")
+        result = self.env_port
+        if not result:
+            result = self.get_config_int(self._production_section, "port")
+        return result
+
+    @property
+    def env_username(self) -> str:
+        result = None
+        if DatabasePostgreSql.ENV_USER in os.environ:
+            result = os.environ[DatabasePostgreSql.ENV_USER]
+        return result
 
     @property
     def username(self) -> str:
-        return self.get_config_str(self._production_section, "username")
+        result = self.env_username
+        if not result:
+            result = self.get_config_str(self._production_section, "username")
+        return result
+
+    @property
+    def env_password_file(self) -> str:
+        result = None
+        if DatabasePostgreSql.ENV_PASSWORD_FILE in os.environ:
+            result = os.environ[DatabasePostgreSql.ENV_PASSWORD_FILE]
+        return result
 
     @property
     def password(self) -> str:
-        result= self.get_config_str(self._production_section, "password")
+        password_file = self.env_password_file
+        if password_file:
+            with open(password_file, "r") as file:
+                content = file.readlines()
+            if len(content) != 1:
+                raise ValueError("the password file '{}' should only contain one line.".format(password_file))
+            result = content[0].strip()
+        else:
+            result = self.get_config_str(self._production_section, "password")
         return result
 
     @password.setter
@@ -195,8 +268,18 @@ class DatabasePostgreSql(BaseDatabase):
         self.config[self._production_section]["password"] = value
 
     @property
+    def env_database(self) -> str:
+        result = None
+        if DatabasePostgreSql.ENV_DB_NAME in os.environ:
+            result = os.environ[DatabasePostgreSql.ENV_DB_NAME]
+        return result
+
+    @property
     def production_database(self) -> str:
-        return self.get_config_str(self._production_section, "database")
+        result = self.env_database
+        if not result:
+            result = self.get_config_str(self._production_section, "database")
+        return result
 
     @property
     def test_database(self) -> str:
@@ -208,12 +291,13 @@ class DatabasePostgreSql(BaseDatabase):
 
     @property
     def connection_string(self):
-        return "{}://{}:{}@{}:{}/{}".format(self.dialect,
-                                            self.username,
-                                            self.password,
-                                            self.host,
-                                            self.port,
-                                            self.database)
+        result = "{}://{}:{}@{}:{}/{}".format(self.dialect,
+                                              self.username,
+                                              self.password,
+                                              self.host,
+                                              self.port,
+                                              self.database)
+        return result
 
 
 class DatabaseSqlite(BaseDatabase):
@@ -269,7 +353,7 @@ class DatabaseFactory(BaseConfig):
     """
 
     def __init__(self, production: bool = True):
-        super().__init__("database.config")
+        super().__init__("../config/database.config")
         self._database = None
         self.production = production
         self.type = self.get_config_str("database", "active")
@@ -325,8 +409,6 @@ class DatabaseFactory(BaseConfig):
     def password(self, value: str) -> None:
         if self.is_postgres:
             self._database.password = value
-
-            #self.config[self._database.production_section]["password"] = value
 
     @property
     def database(self) -> str:

@@ -219,14 +219,14 @@ Before you start a new engagement, you might want to re-initialize the database 
 which will delete all previously collected data:
 
 ```bash
-$ sudo docker-compose run smartfilehunter db --drop --init
+$ sudo docker-compose run --rm smartfilehunter filehunter db --drop --init
 ```
 
 Afterwards, a new workspace has to be created in the SFH database via the following command (variable `$ws` holds
 the workspace name):
 
 ```bash
-$ sudo docker-compose run smartfilehunter db -a $ws
+$ sudo docker-compose run --rm smartfilehunter filehunter db -a $ws
 ```
 
 Note that once the enumeration of a service is successfully completed, SFH marks this service as completed
@@ -244,7 +244,7 @@ which do not support this command.
 For more information about FTP enumeration, refer to the SFH help:
 
 ```bash
-$ sudo docker-compose run smartfilehunter ftp -h
+$ sudo docker-compose run --rm smartfilehunter filehunter ftp -h
 ```
 
 The following video shows an FTP enumeration example using SFH's [test data](testdata):
@@ -259,7 +259,7 @@ SFH's [NFS enumeration module](sfh/hunters/modules/nfs.py) uses the Python3 libr
 For more information about NFS enumeration, refer to the SFH help:
 
 ```bash
-$ sudo docker-compose run smartfilehunter nfs -h
+$ sudo docker-compose run --rm smartfilehunter filehunter nfs -h
 ```
 
 The following video shows an NFS enumeration example using SFH's [test data](testdata):
@@ -278,7 +278,7 @@ following authentication options:
 For more information about NFS enumeration, refer to the SFH help:
 
 ```bash
-$ sudo docker-compose run smartfilehunter smb -h
+$ sudo docker-compose run --rm smartfilehunter filehunter smb -h
 ```
 
 The following video shows an SMB enumeration example using SFH's [test data](testdata):
@@ -297,7 +297,7 @@ In this case, SFH's [local directory enumeration module](sfh/hunters/modules/loc
 For more information about local filesystem enumeration, refer to the SFH help:
 
 ```bash
-$ sudo docker-compose run smartfilehunter local -h
+$ sudo docker-compose run --rm smartfilehunter filehunter local -h
 ```
 
 The following video provides an example of a local filesystem enumeration via SSHFS using SFH's [test data](testdata):
@@ -323,7 +323,7 @@ SFH speeds up the review and reporting process by implementing the following fea
 You start the review by executing the following command, where variable `$ws` holds the name of the workspace:
 
 ```bash
-$ sudo docker-compose run smartfilehunter review -w $ws
+$ sudo docker-compose run --rm smartfilehunter filehunter review -w $ws
 ```
 
 After the execution of the above command, SFH starts an interactive command prompt and displays the first file.
@@ -358,7 +358,7 @@ Finally, you can export the review results into a CSV or Microsoft Excel file. F
 refer to the SFH help:
 
 ```bash
-$ sudo docker-compose run smartfilehunter report -h
+$ sudo docker-compose run --rm smartfilehunter filehunter report -h
 ```
 
 The following video provides an example CSV report about the relevant files, which were identified during the

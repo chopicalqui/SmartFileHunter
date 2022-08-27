@@ -120,6 +120,7 @@ class FileAnalzer(BaseAnalyzer):
                         full_path = item.replace(dir_name, path.full_path, 1)
                         tmp = Path(service=path.service,
                                    full_path=full_path,
+                                   extra_info=path.extra_info,
                                    access_time=datetime.fromtimestamp(stats.st_atime, tz=timezone.utc),
                                    modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
                                    creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc))

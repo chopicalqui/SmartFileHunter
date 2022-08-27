@@ -130,7 +130,8 @@ class _FileSummaryReportGenerator(_BaseReportGenerator):
                    "Creation Date",
                    "Last Modified",
                    "SHA256 Value",
-                   "Comment"]]
+                   "Comment",
+                   "Extra Info"]]
         ref = 1
         dedup = {}
         for workspace_str in self._workspaces:
@@ -148,7 +149,8 @@ class _FileSummaryReportGenerator(_BaseReportGenerator):
                                        path.creation_time.strftime('%m/%d/%Y %H:%M:%S'),
                                        path.modified_time.strftime('%m/%d/%Y %H:%M:%S'),
                                        file.sha256_value,
-                                       file.comment])
+                                       file.comment,
+                                       path._extra_info])
                         ref += 1
         return result
 

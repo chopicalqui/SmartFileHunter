@@ -36,7 +36,7 @@ from database.model import MatchRuleAccuracy
 from test.core import BaseTestCase
 from test.core import ArgumentHelper
 from hunters.analyzer.core import FileAnalzer
-from config.config import FileHunter
+from database.config import FileHunter
 
 
 class BaseTestFileAnalyzer(BaseTestCase):
@@ -603,6 +603,55 @@ exit 0""")
             self.assertEqual(FileRelevance.medium, result.relevance)
             self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
             self.assertEqual('eyJ\\w+?\\.eyJ\\w+?\\.', result.search_pattern)
+
+    def test_authorization_header(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\appsettings.json",
+                               txt_content="""curl -k -H "Authorization: Bearer $TOKEN" ...""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual('Authorization:\\s*Bearer\\s+', result.search_pattern)
+
+    def test_kubernetes_token_1(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\appsettings.json",
+                               txt_content="""{
+    "token": "ZXlKaG...",
+}""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("[\"']?((Token)|(AccessKeyId)|(SecretAccessKey))[\"']?\\s*:\\s+[\"']?[a-zA-Z0-9]+", result.search_pattern)
+
+    def test_kubernetes_token_2(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\appsettings.json",
+                               txt_content="""
+    token: ZXlKaG...
+""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual("[\"']?((Token)|(AccessKeyId)|(SecretAccessKey))[\"']?\\s*:\\s+[\"']?[a-zA-Z0-9]+", result.search_pattern)
 
     def test_domain_name_argument(self):
         self.init_db()

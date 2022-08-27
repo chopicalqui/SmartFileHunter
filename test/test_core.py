@@ -25,7 +25,7 @@ __version__ = 0.1
 import unittest
 from test.core import ArgumentHelper
 from database.model import Path
-from config.config import FileHunter as FileHunterConfig
+from database.config import FileHunter as FileHunterConfig
 
 
 class TestFileHunterConfig(unittest.TestCase):

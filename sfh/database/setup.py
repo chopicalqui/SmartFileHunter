@@ -29,9 +29,9 @@ import logging
 from threading import Thread
 from database.core import Engine
 from database.model import Workspace
-from config.config import DatabaseType
-from config.config import DatabaseFactory
-from config.config import FileHunter as FileHunterConfig
+from database.config import DatabaseType
+from database.config import DatabaseFactory
+from database.config import FileHunter as FileHunterConfig
 from sqlalchemy.orm import sessionmaker
 
 Session = sessionmaker()

@@ -27,7 +27,7 @@ import numpy
 import pandas
 import argparse
 from cmd import Cmd
-from config.config import FileHunter as FileHunterConfig
+from database.config import FileHunter as FileHunterConfig
 from database.core import Engine
 from database.model import File
 from database.model import MatchRule

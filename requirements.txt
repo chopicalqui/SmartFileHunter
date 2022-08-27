@@ -10,5 +10,7 @@ psycopg2-binary
 sqlalchemy
 termcolor
 pandas
-numpy==1.19.5
+numpy
 pyOpenSSL
+requests
+gitpython

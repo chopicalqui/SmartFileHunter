@@ -1,7 +1,51 @@
-version: "3"
+version: "3.1"
 services:
-  smartfilehunter:
-    network_mode: host
+  db:
+    image: postgres:latest
+    container_name: smartfilehunterdb
     volumes:
-      - /opt/smartfilehunter/sfh/config/:/opt/smartfilehunter/config/
-    build: .
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - sfh
+    environment:
+      POSTGRES_DB: sfh
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: sfh
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+
+  smartfilehunter:
+    container_name: smartfilehunter
+    depends_on:
+      - db
+    volumes:
+      - sfh_config:/opt/smartfilehunter/sfh/config/
+      - sfh_data:/sfh
+    networks:
+      - sfh
+    environment:
+      SFH_DB_USER: sfh
+      SFH_DB_PASSWORD_FILE: /run/secrets/db_password
+      SFH_DB_HOST: db
+      SFH_DB_PORT: 5432
+      SFH_DB_NAME: sfh
+      SFH_LOG_PATH: /sfh
+    secrets:
+      - db_password
+    build:
+      context: .
+      target: production
+    tty: True
+
+secrets:
+   db_password:
+     file: /opt/smartfilehunter/postgres.txt
+
+volumes:
+    db_data:
+    sfh_config:
+    sfh_data:
+
+networks:
+    sfh:

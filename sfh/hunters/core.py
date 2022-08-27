@@ -33,7 +33,7 @@ from database.model import File
 from database.model import MatchRule
 from database.model import SearchLocation
 from database.model import FileRelevance
-from config.config import FileHunter as FileHunterConfig
+from database.config import FileHunter as FileHunterConfig
 
 logger = logging.getLogger('analyzer')
 
@@ -98,6 +98,7 @@ class BaseAnalyzer(Thread):
                                      full_path=path.full_path,
                                      share=path.share.name if path.share else None,
                                      file=file,
+                                     extra_info=path.extra_info,
                                      access_time=path.access_time,
                                      modified_time=path.modified_time,
                                      creation_time=path.creation_time)

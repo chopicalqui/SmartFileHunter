@@ -39,13 +39,15 @@ from database.report import ExcelReport
 from database.report import ReportGenerator
 from database.model import WorkspaceNotFound
 from database.model import HunterType
-from config.config import DatabaseType
+from database.config import DatabaseType
 from hunters.analyzer.core import FileAnalzer
 from hunters.modules.smb import SmbSensitiveFileHunter
 from hunters.modules.ftp import FtpSensitiveFileHunter
 from hunters.modules.nfs import NfsSensitiveFileHunter
 from hunters.modules.local import LocalSensitiveFileHunter
-from config.config import FileHunter as FileHunterConfig
+from hunters.modules.git import LocalGitSensitiveFileHunter
+from hunters.modules.git import RemoteGitSensitiveFileHunter
+from database.config import FileHunter as FileHunterConfig
 
 logger = logging.getLogger("main")
 
@@ -101,10 +103,11 @@ if __name__ == "__main__":
                                type=str,
                                help='the workspace used for reporting. if no workspace is specified, then all '
                                     'existing workspaces will be used')
-    parser_report.add_argument('-e', '--excel', type=str, help="write report to given excel file")
-    parser_report.add_argument('-c', '--csv',
-                               choices=[item.name for item in ExcelReport],
-                               help="print report results to stdout as CSV")
+    parser_report_format = parser_report.add_mutually_exclusive_group(required=True)
+    parser_report_format.add_argument('-e', '--excel', type=str, help="write report to given excel file")
+    parser_report_format.add_argument('-c', '--csv',
+                                      choices=[item.name for item in ExcelReport],
+                                      help="print report results to stdout as CSV")
 
     # setup SMB parser
     parser_smb = sub_parser.add_parser(HunterType.smb.name, help='enumerate SMB services')
@@ -123,6 +126,14 @@ if __name__ == "__main__":
     # setup local parser
     parser_local = sub_parser.add_parser(HunterType.local.name, help='enumerate local file system')
     LocalSensitiveFileHunter.add_argparse_arguments(parser_local)
+
+    # setup local git parser
+    parser_git = sub_parser.add_parser(HunterType.gitlocal.name, help='enumerate local git repositories')
+    LocalGitSensitiveFileHunter.add_argparse_arguments(parser_git)
+
+    # setup remote git parser
+    parser_git = sub_parser.add_parser(HunterType.gitremote.name, help='enumerate remote git repositories')
+    RemoteGitSensitiveFileHunter.add_argparse_arguments(parser_git)
     args = parser.parse_args()
 
     level = logging.DEBUG if args.debug else logging.INFO
@@ -173,6 +184,12 @@ if __name__ == "__main__":
                 enumeration_class = NfsSensitiveFileHunter
             elif args.module == HunterType.local.name:
                 enumeration_class = LocalSensitiveFileHunter
+            elif args.module == HunterType.gitlocal.name:
+                enumeration_class = LocalGitSensitiveFileHunter
+            elif args.module == HunterType.gitremote.name:
+                enumeration_class = RemoteGitSensitiveFileHunter
+            else:
+                raise NotImplementedError("case not implemented.")
             if enumeration_class:
                 analyzers = []
                 engine = Engine()

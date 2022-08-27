@@ -41,9 +41,10 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
     This class implements the core functionality to hunt for files on local file system
     """
 
-    def __init__(self, args: argparse.Namespace, **kwargs):
-        super().__init__(args, address="127.0.0.1", service_name=HunterType.local, **kwargs)
-        self.path = [os.path.abspath(item) for item in args.path]
+    def __init__(self, args: argparse.Namespace, address: str = "127.0.0.1", service_name: HunterType = HunterType.local, **kwargs):
+        super().__init__(args, address=address, service_name=service_name, **kwargs)
+        paths = args.path if "path" in args else []
+        self.path = [os.path.abspath(item) for item in paths]
 
     @staticmethod
     def add_argparse_arguments(parser: argparse.ArgumentParser) -> None:
@@ -65,12 +66,13 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
                                  'search pattern: "\\w+@DOMAIN". the objective is the identification of files '
                                  'containing UPNs and eventually their passwords.')
 
-    def _enumerate(self) -> None:
+    def _enumerate(self, paths: list = None, extra_info: dict = None) -> None:
         """
         This method enumerates all files on the given service.
         :return:
         """
-        for path in self.path:
+        paths = paths if paths else self.path
+        for path in paths:
             path = path if path[-1] == "/" else path + "/"
             for item in glob.iglob(path + "**", recursive=True):
                 if os.path.islink(item):
@@ -79,6 +81,7 @@ class LocalSensitiveFileHunter(BaseSensitiveFileHunter):
                 if os.path.isfile(item):
                     path = Path(service=self.service,
                                 full_path=item,
+                                extra_info=extra_info,
                                 access_time=datetime.fromtimestamp(stats.st_atime, tz=timezone.utc),
                                 modified_time=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
                                 creation_time=datetime.fromtimestamp(stats.st_ctime, tz=timezone.utc))

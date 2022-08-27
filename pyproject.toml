@@ -5,7 +5,7 @@ description = "The objective of Smart File Hunter (SFH) is the efficient identif
 authors = ["Lukas Reiter <chopicalqui@protonmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.8,<3.11"
 impacket = "^0.9.23"
 libnfs = "^1.0.post4"
 python-magic = "^0.4.24"
@@ -20,6 +20,8 @@ termcolor = "^1.1.0"
 pandas = "^1.3.2"
 numpy = "1.19.5"
 pyOpenSSL = "^20.0.1"
+GitPython = "^3.1.27"
+requests = "^2.28.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"

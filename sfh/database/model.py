@@ -24,6 +24,7 @@ __version__ = 0.1
 
 import os
 import re
+import json
 import enum
 import magic
 import hashlib
@@ -39,9 +40,9 @@ from sqlalchemy import Text
 from sqlalchemy import Enum
 from sqlalchemy import Table
 from sqlalchemy import LargeBinary
+from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import backref
-from sqlalchemy import UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from termcolor import colored
@@ -62,6 +63,8 @@ class HunterType(enum.Enum):
     ftp = enum.auto()
     nfs = enum.auto()
     local = enum.auto()
+    gitlocal = enum.auto()
+    gitremote = enum.auto()
 
 
 class ReviewResult(enum.Enum):
@@ -206,6 +209,7 @@ class Path(DeclarativeBase):
     access_time = Column(DateTime, nullable=True)
     modified_time = Column(DateTime, nullable=True)
     creation_time = Column(DateTime, nullable=True)
+    _extra_info = Column("extra_info", Text, nullable=True, unique=False)
     service_id = Column(Integer, ForeignKey("service.id", ondelete='cascade'), nullable=False, unique=False)
     share_id = Column(Integer, ForeignKey("share.id", ondelete='cascade'), nullable=True, unique=False)
     file_id = Column(Integer, ForeignKey("file.id", ondelete='cascade'), nullable=True, unique=False)
@@ -216,6 +220,14 @@ class Path(DeclarativeBase):
                         cascade="all",
                         order_by="desc(File.size_bytes)")
     __table_args__ = (UniqueConstraint('full_path', 'share_id', 'service_id', name='_path_unique'),)
+
+    @property
+    def extra_info(self):
+        return json.loads(self._extra_info)
+
+    @extra_info.setter
+    def extra_info(self, value):
+        self._extra_info = json.dumps(value)
 
     @property
     def full_path(self) -> str:

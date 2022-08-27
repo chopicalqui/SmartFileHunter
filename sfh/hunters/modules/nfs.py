@@ -24,7 +24,6 @@ __version__ = 0.1
 
 import os
 import stat
-import libnfs
 import logging
 import argparse
 from datetime import datetime
@@ -43,6 +42,7 @@ class NfsSensitiveFileHunter(BaseSensitiveFileHunter):
     """
 
     def __init__(self, args: argparse.Namespace, **kwargs):
+        import libnfs
         super().__init__(args, address=args.host, port=args.port, service_name=HunterType.nfs, **kwargs)
         self.path = args.path
         self.version = args.version
