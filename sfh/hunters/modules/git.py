@@ -165,13 +165,14 @@ class RemoteGitSensitiveFileHunter(GitSensitiveFileHunterBase):
             dedup = {}
             repository = repository.strip()
             with tempfile.TemporaryDirectory() as directory:
+                repository_login = repository
                 if self.username and self.password:
                     tmp = urlparse(repository)
-                    repository = "{scheme}://{user}:{password}@{netloc}{path}".format(scheme=tmp.scheme,
-                                                                                          user=self.username,
-                                                                                          password=self.password,
-                                                                                          netloc=tmp.netloc,
-                                                                                          path=tmp.path)
-                git.Repo.clone_from(repository, directory)
+                    repository_login = "{scheme}://{user}:{password}@{netloc}{path}".format(scheme=tmp.scheme,
+                                                                                            user=self.username,
+                                                                                            password=self.password,
+                                                                                            netloc=tmp.netloc,
+                                                                                            path=tmp.path)
+                git.Repo.clone_from(repository_login, directory)
                 repo = git.Git(directory)
                 self.parse_commit(repo, dedup=dedup, extra_info={"git-repository": repository})

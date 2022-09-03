@@ -222,11 +222,11 @@ class Path(DeclarativeBase):
     __table_args__ = (UniqueConstraint('full_path', 'share_id', 'service_id', name='_path_unique'),)
 
     @property
-    def extra_info(self):
-        return json.loads(self._extra_info)
+    def extra_info(self) -> dict:
+        return json.loads(self._extra_info) if self._extra_info else {}
 
     @extra_info.setter
-    def extra_info(self, value):
+    def extra_info(self, value: dict):
         self._extra_info = json.dumps(value)
 
     @property
@@ -246,11 +246,14 @@ class Path(DeclarativeBase):
         if self.share:
             result = str(self.share)
         elif self.service and self.service.host:
-            result = str(self.service)
-            if self.service.name == HunterType.smb and self.share:
-                result += "/{}".format(self.share)
+            service = str(self.service)
+            if not service.startswith(HunterType.gitlocal.name + "://") and not \
+                    service.startswith(HunterType.gitremote.name + "://"):
+                result = str(self.service)
+                if self.service.name == HunterType.smb and self.share:
+                    result += "/{}".format(self.share)
         if self.full_path:
-            result += self.full_path if self.full_path[0] == "/" else ("/" + self.full_path)
+            result += self.full_path if not result or self.full_path[0] == "/" else ("/" + self.full_path)
         return result
 
 
@@ -582,6 +585,22 @@ class MatchRule(DeclarativeBase):
                                                          self.relevance_str,
                                                          self.accuracy.name,
                                                          self.search_pattern)
+    @staticmethod
+    def merge_markers(markers: list) -> list:
+        """
+        This method removes all markers that are duplicates and merges overlapping markers.
+        :param markers:
+        :return:
+        """
+        markers.sort(key=lambda x: x[0])
+        j = 0
+        for i in range(1, len(markers)):
+            if markers[j][1] >= markers[i][0]:
+                markers[j] = (markers[j][0], max(markers[j][1], markers[i][1]))
+            else:
+                j += 1
+                markers[j] = markers[i]
+        return markers[:j+1]
 
     def get_text_markers(self, text: str, known_markers: list = []) -> list:
         """
@@ -590,30 +609,13 @@ class MatchRule(DeclarativeBase):
         :param text: The text that is searched.
         :param known_markers: Markers that have previously already identified.
         """
-        result = list(known_markers)
+        # Remove duplicates
+        result = list(set(known_markers))
+        # Identify new markers
         if self.search_pattern_re_text is not None and text:
             for item in self.search_pattern_re_text.finditer(text):
-                if known_markers:
-                    for new_index in range(0, len(item.regs)):
-                        i, j = item.regs[new_index]
-                        for current_index in range(0, len(result)):
-                            k, m = result[current_index]
-                            if i <= k and j >= m:
-                                result[current_index] = (i, j)
-                                break
-                            elif k <= i <= m and k <= j <= m:
-                                break
-                            elif k <= i <= m and j >= m:
-                                result[current_index] = (k, j)
-                                break
-                            elif i <= k and k <= j <= m:
-                                result[current_index] = (i, m)
-                                break
-                        else:
-                            result.append((i, j))
-                elif item.regs:
-                    result.extend(item.regs)
-        return result
+                result.extend([i for i in item.regs if i[0] >= 0 and i[1] >= 0 and i[0] != i[1]])
+        return self.merge_markers(result)
 
     def get_text(self, color: bool = False) -> str:
         """

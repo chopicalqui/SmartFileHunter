@@ -34,6 +34,7 @@ from database.model import MatchRule
 from database.model import SearchLocation
 from database.model import FileRelevance
 from database.config import FileHunter as FileHunterConfig
+from urllib.parse import urljoin
 
 logger = logging.getLogger('analyzer')
 
@@ -93,6 +94,11 @@ class BaseAnalyzer(Thread):
                                                 workspace=workspace,
                                                 file=path.file)
                     file.add_match_rule(match_file)
+                if "git-repository" in path.extra_info:
+                    git_repo_home = path.extra_info["git-repository"].lower().rstrip(".git")
+                    relative_path = "/".join(path.full_path.split("/")[3:])
+                    path.full_path = "{}/{}".format(git_repo_home, relative_path)
+                    path.full_path += " ({}, {})".format(path.extra_info["git-branch"], path.extra_info["git-commit"])
                 self.engine.add_path(session=session,
                                      service=service,
                                      full_path=path.full_path,

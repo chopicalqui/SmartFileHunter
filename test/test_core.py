@@ -25,6 +25,7 @@ __version__ = 0.1
 import unittest
 from test.core import ArgumentHelper
 from database.model import Path
+from database.model import MatchRule
 from database.config import FileHunter as FileHunterConfig
 
 
@@ -86,3 +87,16 @@ class TestFileSizeThreshold(unittest.TestCase):
         result = self._config.is_below_threshold(path=Path(full_path="/tmp/test.txt"),
                                                  file_size=10000000000)
         self.assertTrue(result)
+
+
+class TestReviewMarkerMerging(unittest.TestCase):
+    """
+    this class tests method
+    """
+
+    def __init__(self, test_name: str):
+        super().__init__(test_name)
+
+    def test_marker1(self):
+        self.assertListEqual([(1, 9)], MatchRule.merge_markers([(6, 8), (1, 9), (2, 4), (4, 7)]))
+        self.assertListEqual([(2, 8)], MatchRule.merge_markers([(6, 8), (5, 6), (2, 4), (4, 7)]))

@@ -616,7 +616,7 @@ exit 0""")
                 .join(File, MatchRule.files).one()
             self.assertEqual(SearchLocation.file_content, result.search_location)
             self.assertEqual(FileRelevance.medium, result.relevance)
-            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual(MatchRuleAccuracy.high, result.accuracy)
             self.assertEqual('Authorization:\\s*Bearer\\s+', result.search_pattern)
 
     def test_kubernetes_token_1(self):
@@ -634,7 +634,7 @@ exit 0""")
             self.assertEqual(SearchLocation.file_content, result.search_location)
             self.assertEqual(FileRelevance.medium, result.relevance)
             self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
-            self.assertEqual("[\"']?((Token)|(AccessKeyId)|(SecretAccessKey))[\"']?\\s*:\\s+[\"']?[a-zA-Z0-9]+", result.search_pattern)
+            self.assertEqual("[\"']?((key)|(secrets?)|(Token)|(AccessKeyId)|(SecretAccessKey))[\"']?\\s*[:=]\\s+[\"']?[a-zA-Z0-9]+", result.search_pattern)
 
     def test_kubernetes_token_2(self):
         self.init_db()
@@ -651,7 +651,25 @@ exit 0""")
             self.assertEqual(SearchLocation.file_content, result.search_location)
             self.assertEqual(FileRelevance.medium, result.relevance)
             self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
-            self.assertEqual("[\"']?((Token)|(AccessKeyId)|(SecretAccessKey))[\"']?\\s*:\\s+[\"']?[a-zA-Z0-9]+", result.search_pattern)
+            self.assertEqual("[\"']?((key)|(secrets?)|(Token)|(AccessKeyId)|(SecretAccessKey))[\"']?\\s*[:=]\\s+[\"']?[a-zA-Z0-9]+", result.search_pattern)
+
+    def test_kubernetes_token_3(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="C:\\temp\\appsettings.json",
+                               txt_content="""
+    ZXlKaG7abc3FgaYTUJHGEa673...
+""")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.file_content, result.search_location)
+            self.assertEqual("ZXlK[A-Z0-9]{10,}",
+                             result.search_pattern)
+            self.assertEqual(FileRelevance.medium, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.low, result.accuracy)
 
     def test_domain_name_argument(self):
         self.init_db()
@@ -832,3 +850,18 @@ class TestFileName(BaseTestFileAnalyzer):
             self.assertEqual(FileRelevance.medium, result.relevance)
             self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
             self.assertEqual("^appsettings\\..*?\\.json$", result.search_pattern)
+
+    def test_appsettings_ssh_folder(self):
+        self.init_db()
+        # Analyze given data
+        self._add_file_content(workspace="test",
+                               full_path="/root/.ssh/id_rsa",
+                               txt_content="")
+        # Verify database
+        with self._engine.session_scope() as session:
+            result = session.query(MatchRule) \
+                .join(File, MatchRule.files).one()
+            self.assertEqual(SearchLocation.full_path, result.search_location)
+            self.assertEqual(FileRelevance.high, result.relevance)
+            self.assertEqual(MatchRuleAccuracy.medium, result.accuracy)
+            self.assertEqual(".*[\\/]\\.ssh[\\/].*", result.search_pattern)
